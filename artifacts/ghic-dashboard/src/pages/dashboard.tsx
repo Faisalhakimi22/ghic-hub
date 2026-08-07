@@ -45,7 +45,14 @@ function BentoCard({
       </div>
       <div>
         <div className="font-display font-bold leading-none tracking-tight" style={{ fontSize: "clamp(2.25rem, 3.5vw, 3rem)" }}>
-          {value}
+          {/* null means GHIC does not track this metric, or the call that
+              would have fetched it failed. Rendering an em dash says so;
+              a blank card reads as broken and a zero reads as measured. */}
+          {value === null || value === undefined ? (
+            <span className="opacity-40" title="Not tracked by GHIC">&mdash;</span>
+          ) : (
+            value
+          )}
         </div>
         {trend !== undefined && (
           <div className={`flex items-center gap-1 mt-2 text-[11px] font-bold ${trendColor[variant](trend)}`}>
@@ -80,9 +87,9 @@ export default function Dashboard() {
             <h2 className="text-sm font-display tracking-widest uppercase font-bold text-muted-foreground border-b border-border pb-2">Key Metrics</h2>
             {/* Row 1 — 4 primary KPIs */}
             <div className="grid grid-cols-4 gap-3">
-              <BentoCard label="Health Score"    value={stats.repositoryHealthScore} trend={2}   icon={Activity}     variant="default" />
-              <BentoCard label="Risk Score"       value={stats.engineeringRiskScore}  trend={-5}  icon={AlertCircle}  variant="dark"    />
-              <BentoCard label="Open Issues"      value={stats.openIssues}            trend={12}  icon={Bug}          variant="accent"  />
+              <BentoCard label="Health Score"    value={stats.repositoryHealthScore}   icon={Activity}     variant="default" />
+              <BentoCard label="Risk Score"       value={stats.engineeringRiskScore}  icon={AlertCircle}  variant="dark"    />
+              <BentoCard label="Open Issues"      value={stats.openIssues}  icon={Bug}          variant="accent"  />
               <BentoCard label="Analyses Today"   value={stats.aiAnalysesToday}                   icon={Cpu}          variant="default" />
             </div>
             {/* Row 2 — 5 secondary KPIs */}
@@ -90,7 +97,7 @@ export default function Dashboard() {
               <BentoCard label="Repos Connected"  value={stats.repositoriesConnected}             icon={Box}          variant="default" />
               <BentoCard label="Issues Today"     value={stats.issuesToday}                                           variant="dark"    />
               <BentoCard label="Resolved Today"   value={stats.resolvedToday}                                         variant="default" />
-              <BentoCard label="Regressions"      value={stats.regressions}           trend={1}   icon={FileWarning}  variant="default" />
+              <BentoCard label="Regressions"      value={stats.regressions}   icon={FileWarning}  variant="default" />
               <BentoCard label="Duplicates"       value={stats.duplicateCandidates}               icon={Copy}         variant="default" />
             </div>
           </div>
