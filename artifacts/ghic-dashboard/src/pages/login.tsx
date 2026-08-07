@@ -1,6 +1,19 @@
-import { Github, Loader2, ShieldCheck, TriangleAlert } from 'lucide-react';
+import { CheckCircle2, Github, Loader2, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { MARKETING_URL } from '@/lib/firebase';
+
+function gitHubSetupState() {
+  const params = new URLSearchParams(window.location.search);
+  const fromSetup = params.get('source') === 'github_app_setup';
+  const installationId = params.get('installation_id');
+  const setupAction = params.get('setup_action');
+
+  return {
+    active: fromSetup || Boolean(installationId || setupAction),
+    installationId,
+    setupAction,
+  };
+}
 
 /**
  * Sign-in gate for the dashboard.
@@ -13,6 +26,7 @@ import { MARKETING_URL } from '@/lib/firebase';
  */
 export default function Login() {
   const { error, configured, signInWithGitHub, loading, clearError } = useAuth();
+  const setup = gitHubSetupState();
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-6">
@@ -22,13 +36,26 @@ export default function Login() {
             GHIC Dashboard
           </span>
           <h1 className="text-2xl font-display font-bold tracking-tight uppercase">
-            Sign in
+            {setup.active ? 'GitHub app installed' : 'Sign in'}
           </h1>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            This dashboard shows live repository and triage data. Sign in with the GitHub
-            account you use for GHIC.
+            {setup.active
+              ? 'GHIC is connected to GitHub. Sign in with the same GitHub account to open the hub.'
+              : 'This dashboard shows live repository and triage data. Sign in with the GitHub account you use for GHIC.'}
           </p>
         </div>
+
+        {setup.active && (
+          <div className="border border-emerald-500/40 bg-emerald-500/5 p-4 flex flex-col gap-2">
+            <span className="flex items-center gap-2 text-[10px] font-display tracking-widest uppercase font-bold text-emerald-700 dark:text-emerald-300">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Installation complete
+            </span>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Repository access is installed. One GitHub sign-in creates the browser session
+              for this dashboard.
+            </p>
+          </div>
+        )}
 
         {!configured && (
           <div className="border border-border bg-muted/40 p-4 flex flex-col gap-2">
@@ -67,7 +94,7 @@ export default function Login() {
             </>
           ) : (
             <>
-              <Github className="w-4 h-4" /> Continue with GitHub
+              <Github className="w-4 h-4" /> {setup.active ? 'Open hub with GitHub' : 'Continue with GitHub'}
             </>
           )}
         </button>
