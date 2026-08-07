@@ -21,21 +21,19 @@ export default function Dashboard() {
         {statsLoading ? (
           <div className="h-32 bg-muted animate-pulse border border-border" />
         ) : stats ? (
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-3">
             <h2 className="text-sm font-display tracking-widest uppercase font-bold text-muted-foreground border-b border-border pb-2">Key Metrics</h2>
-            <Grid cols={5} gap={4}>
-              <MetricCard title="Health Score" value={stats.repositoryHealthScore} trend={2} icon={Activity} />
-              <MetricCard title="Risk Score" value={stats.engineeringRiskScore} trend={-5} icon={AlertCircle} />
-              <MetricCard title="Repos Connected" value={stats.repositoriesConnected} icon={Box} />
-              <MetricCard title="Open Issues" value={stats.openIssues} trend={12} icon={Bug} />
-              <MetricCard title="Analyses Today" value={stats.aiAnalysesToday} icon={Cpu} />
-            </Grid>
-            <Grid cols={4} gap={4}>
-              <MetricCard title="Issues Today" value={stats.issuesToday} />
-              <MetricCard title="Resolved Today" value={stats.resolvedToday} />
-              <MetricCard title="Regressions" value={stats.regressions} trend={1} icon={FileWarning} />
-              <MetricCard title="Duplicates" value={stats.duplicateCandidates} icon={Copy} />
-            </Grid>
+            <div className="grid grid-cols-9 gap-0 border border-border">
+              <MetricCard compact title="Health Score" value={stats.repositoryHealthScore} trend={2} icon={Activity} className="border-0 border-r border-border" />
+              <MetricCard compact title="Risk Score" value={stats.engineeringRiskScore} trend={-5} icon={AlertCircle} className="border-0 border-r border-border" />
+              <MetricCard compact title="Repos" value={stats.repositoriesConnected} icon={Box} className="border-0 border-r border-border" />
+              <MetricCard compact title="Open Issues" value={stats.openIssues} trend={12} icon={Bug} className="border-0 border-r border-border" />
+              <MetricCard compact title="Analyses Today" value={stats.aiAnalysesToday} icon={Cpu} className="border-0 border-r border-border" />
+              <MetricCard compact title="Issues Today" value={stats.issuesToday} className="border-0 border-r border-border" />
+              <MetricCard compact title="Resolved Today" value={stats.resolvedToday} className="border-0 border-r border-border" />
+              <MetricCard compact title="Regressions" value={stats.regressions} trend={1} icon={FileWarning} className="border-0 border-r border-border" />
+              <MetricCard compact title="Duplicates" value={stats.duplicateCandidates} icon={Copy} className="border-0" />
+            </div>
           </div>
         ) : (
           <div className="p-8 border border-border text-center text-muted-foreground">Failed to load stats</div>

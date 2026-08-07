@@ -39,6 +39,7 @@ export function MetricCard({
   trend, 
   trendLabel, 
   icon: Icon,
+  compact,
   className 
 }: { 
   title: string, 
@@ -46,8 +47,28 @@ export function MetricCard({
   trend?: number, 
   trendLabel?: string, 
   icon?: React.ElementType,
+  compact?: boolean,
   className?: string
 }) {
+  if (compact) {
+    return (
+      <div className={cn("px-3 py-2.5 border border-border bg-card flex flex-col gap-1 min-w-0", className)}>
+        <div className="flex justify-between items-center gap-1 text-muted-foreground">
+          <span className="text-[10px] font-display tracking-widest uppercase truncate">{title}</span>
+          {Icon && <Icon className="w-3 h-3 shrink-0" />}
+        </div>
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-xl font-display font-bold tracking-tight text-foreground leading-none">{value}</span>
+          {trend !== undefined && (
+            <span className={cn("text-[10px] font-bold", trend > 0 ? "text-destructive" : "text-primary")}>
+              {trend > 0 ? '+' : ''}{trend}%
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={cn("p-5 border border-border bg-card flex flex-col gap-3", className)}>
       <div className="flex justify-between items-center text-muted-foreground">
