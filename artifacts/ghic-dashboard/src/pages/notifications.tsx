@@ -1,6 +1,6 @@
 import React from 'react';
 import { useListNotifications, getListNotificationsQueryKey, useMarkNotificationRead } from "@workspace/api-client-react";
-import { PageHeader, PageContent, StatusBadge } from "@/components/ui/swiss";
+import { PageHeader, PageContent, StatusBadge , FeatureUnavailable } from "@/components/ui/swiss";
 import { format } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
@@ -18,6 +18,9 @@ export default function Notifications() {
   return (
     <div className="flex flex-col min-h-full">
       <PageHeader title="Notifications" description="System and repository alerts" />
+      <div className="px-6 pt-6">
+        <FeatureUnavailable reason="GHIC does not have a notifications system. Operational alerts appear on the dashboard instead." />
+      </div>
       <PageContent className="max-w-4xl">
         {isLoading ? (
           <div className="h-64 bg-muted animate-pulse border border-border" />

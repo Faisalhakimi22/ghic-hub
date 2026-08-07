@@ -8,6 +8,13 @@ out-tsc
 .expo
 .expo-shared
 
+# Local environment and deploy state. `.env.example` is the committed
+# template; the real `.env` holds the GHIC API token and never is.
+.env
+.env.*
+!.env.example
+.vercel
+
 # dependencies
 node_modules
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useListPullRequests, getListPullRequestsQueryKey } from "@workspace/api-client-react";
-import { PageHeader, PageContent, StatusBadge } from "@/components/ui/swiss";
+import { PageHeader, PageContent, StatusBadge , FeatureUnavailable } from "@/components/ui/swiss";
 
 export default function PullRequests() {
   const { data, isLoading } = useListPullRequests({}, { query: { queryKey: getListPullRequestsQueryKey() } });
@@ -8,6 +8,9 @@ export default function PullRequests() {
   return (
     <div className="flex flex-col min-h-full">
       <PageHeader title="Pull Requests" description="AI review complexity and risk assessment" />
+      <div className="px-6 pt-6">
+        <FeatureUnavailable reason="Pull request data is not exposed as a list endpoint." />
+      </div>
       <PageContent>
         <div className="border border-border bg-card overflow-x-auto">
           <table className="w-full text-sm text-left">

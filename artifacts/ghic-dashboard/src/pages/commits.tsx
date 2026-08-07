@@ -1,6 +1,6 @@
 import React from 'react';
 import { useListCommits, getListCommitsQueryKey } from "@workspace/api-client-react";
-import { PageHeader, PageContent, StatusBadge } from "@/components/ui/swiss";
+import { PageHeader, PageContent, StatusBadge , FeatureUnavailable } from "@/components/ui/swiss";
 import { format } from "date-fns";
 
 export default function Commits() {
@@ -9,6 +9,9 @@ export default function Commits() {
   return (
     <div className="flex flex-col min-h-full">
       <PageHeader title="Commit Intelligence" description="Risk and regression analysis for recent commits" />
+      <div className="px-6 pt-6">
+        <FeatureUnavailable reason="Commit data lives inside the repository index and is not exposed as a list endpoint." />
+      </div>
       <PageContent>
         <div className="border border-border bg-card overflow-x-auto">
           <table className="w-full text-sm text-left">

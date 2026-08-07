@@ -1,6 +1,6 @@
 import React from 'react';
 import { useListIssues, getListIssuesQueryKey } from "@workspace/api-client-react";
-import { PageHeader, PageContent, StatusBadge } from "@/components/ui/swiss";
+import { PageHeader, PageContent, StatusBadge , FeatureUnavailable } from "@/components/ui/swiss";
 import { Link } from "wouter";
 
 export default function Issues() {
@@ -9,6 +9,9 @@ export default function Issues() {
   return (
     <div className="flex flex-col min-h-full">
       <PageHeader title="Issue Explorer" description="Advanced filterable issue intelligence" />
+      <div className="px-6 pt-6">
+        <FeatureUnavailable reason="GHIC stores predictions rather than issue records. Recently scored issues appear on the dashboard." />
+      </div>
       <PageContent>
         <div className="border border-border bg-card">
           <div className="overflow-x-auto">

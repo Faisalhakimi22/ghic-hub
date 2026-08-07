@@ -1,0 +1,54 @@
+Create a premium cinematic product launch animation for GHIC (GitHub Issue Intelligence), an AI-powered Engineering Intelligence Platform.
+
+The animation should feel like a launch film from Apple, OpenAI, Microsoft, GitHub, or Vercel—not a software advertisement. It should communicate precision, intelligence, trust, and engineering excellence.
+
+The story should visually communicate transformation:
+
+An ordinary GitHub issue appears, surrounded by chaos, uncertainty, and fragmented engineering information. As GHIC activates, streams of engineering intelligence begin flowing through an abstract AI reasoning engine. Repository knowledge, historical issues, commits, pull requests, code relationships, and contextual signals converge into a living neural network. Every connection should feel purposeful, as if the AI is understanding software rather than merely processing text.
+
+The issue gradually transforms into structured engineering intelligence:
+- Classification
+- Priority
+- Severity
+- Regression detection
+- Root cause reasoning
+- Related commits
+- Similar historical issues
+- Investigation plan
+- Automation recommendations
+
+Avoid displaying lots of UI. Instead, use elegant abstract visual metaphors: flowing data streams, interconnected graphs, dynamic geometric structures, glowing nodes, subtle particle systems, intelligent pathways, and premium motion design.
+
+The AI should feel calm, deliberate, and trustworthy—not flashy or futuristic for its own sake. Motion should be smooth, physically believable, and minimalistic.
+
+As the analysis completes, fragmented information resolves into clarity, symbolizing engineering confidence and actionable knowledge.
+
+Finish with a powerful closing scene where countless repositories connect into a global engineering intelligence network, representing software teams around the world becoming more efficient through AI.
+
+The final shot should feel iconic and memorable, ending on a clean premium composition with the GHIC symbol/logo illuminated against a deep black background with subtle electric blue accents.
+
+Visual direction:
+- Cinematic lighting
+- Deep blacks with restrained electric blue highlights
+- Soft volumetric light
+- Premium glass and metallic materials
+- High-end motion graphics
+- Intelligent particle simulations
+- Smooth camera movements
+- Macro-to-cosmic transitions
+- Minimal UI
+- Photorealistic rendering
+- 60 FPS quality
+- Ultra-clean typography only when necessary
+
+Mood:
+Confident.
+Intelligent.
+Technical.
+Elegant.
+Modern.
+Quietly powerful.
+
+Avoid clichés such as robots, brains, holograms, binary rain, spinning globes, exaggerated sci-fi effects, or generic AI imagery. The focus is engineering intelligence, not artificial intelligence itself.
+
+Target quality: launch film suitable for OpenAI, GitHub Universe, Microsoft Build, Apple Keynote, or Vercel Ship.

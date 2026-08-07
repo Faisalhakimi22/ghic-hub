@@ -1,0 +1,28 @@
+kind = "video"
+previewPath = "/ghic-launch-video/"
+title = "GHIC Launch Film"
+description = "A premium cinematic product launch animation for GHIC (GitHub Issue Intelligence). A 60-second motion piece communicating engineering intelligence, precision, and AI-powered clarity — suitable for a GitHub Universe or Vercel Ship keynote."
+version = "1.0.0"
+id = "artifacts/ghic-launch-video"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/ghic-launch-video/" ]
+localPort = 19784
+
+[services.development]
+run = "pnpm --filter @workspace/ghic-launch-video run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/ghic-launch-video", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/ghic-launch-video/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19784"
+BASE_PATH = "/ghic-launch-video/"

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useGetSettings, getGetSettingsQueryKey, useUpdateSettings } from "@workspace/api-client-react";
-import { PageHeader, PageContent } from "@/components/ui/swiss";
+import { PageHeader, PageContent, FeatureUnavailable } from "@/components/ui/swiss";
 import { useQueryClient } from "@tanstack/react-query";
 import { Save } from "lucide-react";
 
@@ -28,6 +28,9 @@ export default function Settings() {
           Save Changes
         </button>
       </PageHeader>
+      <div className="px-6 pt-6">
+        <FeatureUnavailable reason="GHIC is configured with environment variables, not through this dashboard. Changes here are not persisted." />
+      </div>
       
       {/* Tabs */}
       <div className="px-8 border-b border-border bg-card overflow-x-auto scrollbar-none">

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useListAuditLogs, getListAuditLogsQueryKey } from "@workspace/api-client-react";
-import { PageHeader, PageContent, StatusBadge } from "@/components/ui/swiss";
+import { PageHeader, PageContent, StatusBadge , FeatureUnavailable } from "@/components/ui/swiss";
 import { format } from "date-fns";
 
 export default function AuditLogs() {
@@ -9,6 +9,9 @@ export default function AuditLogs() {
   return (
     <div className="flex flex-col min-h-full">
       <PageHeader title="Audit Logs" description="Platform execution and access logs" />
+      <div className="px-6 pt-6">
+        <FeatureUnavailable reason="GHIC does not keep an audit log." />
+      </div>
       <PageContent>
         <div className="border border-border bg-card overflow-x-auto">
           <table className="w-full text-sm text-left">

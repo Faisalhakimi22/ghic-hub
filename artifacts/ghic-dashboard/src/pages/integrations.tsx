@@ -1,6 +1,6 @@
 import React from 'react';
 import { useListIntegrations, getListIntegrationsQueryKey, useToggleIntegration } from "@workspace/api-client-react";
-import { PageHeader, PageContent, Grid, StatusBadge } from "@/components/ui/swiss";
+import { PageHeader, PageContent, Grid, StatusBadge , FeatureUnavailable } from "@/components/ui/swiss";
 import { useQueryClient } from "@tanstack/react-query";
 import { Power, Plug, ExternalLink } from "lucide-react";
 
@@ -17,6 +17,9 @@ export default function Integrations() {
   return (
     <div className="flex flex-col min-h-full">
       <PageHeader title="Integrations" description="Connect external services and webhooks" />
+      <div className="px-6 pt-6">
+        <FeatureUnavailable reason="No third-party integrations are configured." />
+      </div>
       <PageContent>
         {isLoading ? (
           <div className="h-64 bg-muted animate-pulse border border-border" />

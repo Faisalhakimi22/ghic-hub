@@ -1,6 +1,6 @@
 import React from 'react';
 import { useGetOrganization, getGetOrganizationQueryKey, useListMembers, getListMembersQueryKey } from "@workspace/api-client-react";
-import { PageHeader, PageContent, Grid, MetricCard, StatusBadge } from "@/components/ui/swiss";
+import { PageHeader, PageContent, Grid, MetricCard, StatusBadge , FeatureUnavailable } from "@/components/ui/swiss";
 import { Users, Box, Shield } from "lucide-react";
 import { format } from "date-fns";
 
@@ -11,6 +11,9 @@ export default function Organization() {
   return (
     <div className="flex flex-col min-h-full">
       <PageHeader title="Organization" description="Manage team members and roles" />
+      <div className="px-6 pt-6">
+        <FeatureUnavailable reason="GHIC has no multi-tenant organisation model — it authenticates with a single shared token." />
+      </div>
       <PageContent className="flex flex-col gap-8">
         
         {orgLoading ? (

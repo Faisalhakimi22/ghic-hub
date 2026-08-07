@@ -104,3 +104,26 @@ export function StatusBadge({ status, text }: { status: 'success' | 'warning' | 
     </span>
   );
 }
+
+/**
+ * Shown on pages whose data GHIC does not have.
+ *
+ * The alternative was leaving these pages on mock data so they looked
+ * complete. A dashboard that renders invented numbers is worse than one
+ * that admits a gap: the numbers get believed, acted on, and quoted. This
+ * says plainly what is missing and why, which is also the honest input to
+ * deciding whether the feature is worth building.
+ */
+export function FeatureUnavailable({ reason }: { reason?: string }) {
+  return (
+    <div className="border border-dashed border-border bg-muted/30 p-6 flex flex-col gap-2">
+      <span className="text-[10px] font-display tracking-widest uppercase font-bold text-muted-foreground">
+        Not available yet
+      </span>
+      <p className="text-sm text-muted-foreground max-w-2xl leading-relaxed">
+        {reason ||
+          'This view has no data source in GHIC yet. It is intentionally empty rather than showing sample data.'}
+      </p>
+    </div>
+  );
+}
