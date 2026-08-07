@@ -1,9 +1,64 @@
 import React from 'react';
 import { useGetDashboardStats, getGetDashboardStatsQueryKey, useGetDashboardRecentActivity, getGetDashboardRecentActivityQueryKey, useGetDashboardAlerts, getGetDashboardAlertsQueryKey } from "@workspace/api-client-react";
-import { PageHeader, PageContent, Grid, MetricCard, StatusBadge } from "@/components/ui/swiss";
-import { GitPullRequest, AlertCircle, Activity, Bug, Copy, Box, Cpu, FileWarning, PlayCircle } from "lucide-react";
+import { PageHeader, PageContent, Grid, StatusBadge } from "@/components/ui/swiss";
+import { AlertCircle, Activity, Bug, Copy, Box, Cpu, FileWarning, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "wouter";
+
+function BentoCard({
+  label,
+  value,
+  trend,
+  icon: Icon,
+  variant = "default",
+  className = "",
+}: {
+  label: string;
+  value: React.ReactNode;
+  trend?: number;
+  icon?: React.ElementType;
+  variant?: "default" | "dark" | "accent";
+  className?: string;
+}) {
+  const base = "p-5 flex flex-col justify-between min-h-[148px] relative";
+  const variants = {
+    default: "bg-card border border-border text-foreground",
+    dark:    "bg-foreground text-background border border-foreground",
+    accent:  "bg-primary text-primary-foreground border border-primary",
+  };
+  const labelColor = {
+    default: "text-muted-foreground",
+    dark:    "text-background/60",
+    accent:  "text-primary-foreground/70",
+  };
+  const trendColor = {
+    default: (t: number) => t > 0 ? "text-destructive" : "text-primary",
+    dark:    (_: number) => "text-background/80",
+    accent:  (_: number) => "text-primary-foreground/90",
+  };
+
+  return (
+    <div className={`${base} ${variants[variant]} ${className}`}>
+      <div className="flex items-start justify-between gap-2">
+        <span className={`text-[10px] font-display tracking-widest uppercase ${labelColor[variant]}`}>{label}</span>
+        {Icon && <Icon className={`w-3.5 h-3.5 shrink-0 ${labelColor[variant]}`} />}
+      </div>
+      <div>
+        <div className="font-display font-bold leading-none tracking-tight" style={{ fontSize: "clamp(2.25rem, 3.5vw, 3rem)" }}>
+          {value}
+        </div>
+        {trend !== undefined && (
+          <div className={`flex items-center gap-1 mt-2 text-[11px] font-bold ${trendColor[variant](trend)}`}>
+            {trend > 0
+              ? <ArrowUpRight className="w-3 h-3" />
+              : <ArrowDownRight className="w-3 h-3" />}
+            {trend > 0 ? "+" : ""}{trend}% vs last period
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useGetDashboardStats({ query: { queryKey: getGetDashboardStatsQueryKey() } });
@@ -23,16 +78,20 @@ export default function Dashboard() {
         ) : stats ? (
           <div className="flex flex-col gap-3">
             <h2 className="text-sm font-display tracking-widest uppercase font-bold text-muted-foreground border-b border-border pb-2">Key Metrics</h2>
-            <div className="grid grid-cols-9 gap-0 border border-border">
-              <MetricCard compact title="Health Score" value={stats.repositoryHealthScore} trend={2} icon={Activity} className="border-0 border-r border-border" />
-              <MetricCard compact title="Risk Score" value={stats.engineeringRiskScore} trend={-5} icon={AlertCircle} className="border-0 border-r border-border" />
-              <MetricCard compact title="Repos" value={stats.repositoriesConnected} icon={Box} className="border-0 border-r border-border" />
-              <MetricCard compact title="Open Issues" value={stats.openIssues} trend={12} icon={Bug} className="border-0 border-r border-border" />
-              <MetricCard compact title="Analyses Today" value={stats.aiAnalysesToday} icon={Cpu} className="border-0 border-r border-border" />
-              <MetricCard compact title="Issues Today" value={stats.issuesToday} className="border-0 border-r border-border" />
-              <MetricCard compact title="Resolved Today" value={stats.resolvedToday} className="border-0 border-r border-border" />
-              <MetricCard compact title="Regressions" value={stats.regressions} trend={1} icon={FileWarning} className="border-0 border-r border-border" />
-              <MetricCard compact title="Duplicates" value={stats.duplicateCandidates} icon={Copy} className="border-0" />
+            {/* Row 1 — 4 primary KPIs */}
+            <div className="grid grid-cols-4 gap-3">
+              <BentoCard label="Health Score"    value={stats.repositoryHealthScore} trend={2}   icon={Activity}     variant="default" />
+              <BentoCard label="Risk Score"       value={stats.engineeringRiskScore}  trend={-5}  icon={AlertCircle}  variant="dark"    />
+              <BentoCard label="Open Issues"      value={stats.openIssues}            trend={12}  icon={Bug}          variant="accent"  />
+              <BentoCard label="Analyses Today"   value={stats.aiAnalysesToday}                   icon={Cpu}          variant="default" />
+            </div>
+            {/* Row 2 — 5 secondary KPIs */}
+            <div className="grid grid-cols-5 gap-3">
+              <BentoCard label="Repos Connected"  value={stats.repositoriesConnected}             icon={Box}          variant="default" />
+              <BentoCard label="Issues Today"     value={stats.issuesToday}                                           variant="dark"    />
+              <BentoCard label="Resolved Today"   value={stats.resolvedToday}                                         variant="default" />
+              <BentoCard label="Regressions"      value={stats.regressions}           trend={1}   icon={FileWarning}  variant="default" />
+              <BentoCard label="Duplicates"       value={stats.duplicateCandidates}               icon={Copy}         variant="default" />
             </div>
           </div>
         ) : (
