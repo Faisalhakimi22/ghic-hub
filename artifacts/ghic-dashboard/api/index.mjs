@@ -39,6 +39,12 @@ const UNAVAILABLE = {
   releases: 'Release data is not exposed as a list endpoint.',
   settings: 'GHIC is configured with environment variables, not through the dashboard.',
   search: 'Cross-repository search is not exposed yet.',
+  regressions:
+    'Regression counts are computed per repository. Open a repository to see them.',
+  automation:
+    'Automation suggestions are produced per issue, not as a queue. They appear on the issue comment.',
+  intelligence:
+    'Engineering intelligence runs per issue at triage time rather than as a standing report.',
 };
 
 async function ghic(path, { token = true } = {}) {
