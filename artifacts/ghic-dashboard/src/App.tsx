@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Route, Switch, Router as WouterRouter } from 'wouter';
 import { ThemeProvider } from '@/components/theme-provider';
 import { Shell } from '@/components/layout/Shell';
+import { AuthProvider, useAuth } from '@/lib/auth';
+import Login from '@/pages/login';
 
 // Pages
 import Dashboard from '@/pages/dashboard';
@@ -71,13 +73,45 @@ function Router() {
   );
 }
 
+/**
+ * The gate.
+ *
+ * Deliberately swaps the whole tree rather than redirecting from inside
+ * the shell: a signed-out visitor never mounts Router, so no page mounts,
+ * no query fires, and nothing can render data in the frame before a
+ * redirect takes effect. Route-level guards leak exactly that way.
+ *
+ * The API is authenticated independently (see api/_lib/auth.mjs) — this
+ * gate is for the experience, not the security boundary. Removing it
+ * would expose no data, because every endpoint verifies its own token.
+ */
+function ProtectedApp() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="h-8 w-8 animate-pulse bg-muted" aria-label="Loading session" />
+      </div>
+    );
+  }
+
+  if (!user) return <Login />;
+
+  return (
+    <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+      <Router />
+    </WouterRouter>
+  );
+}
+
 function App() {
   return (
     <ThemeProvider defaultTheme="system" storageKey="ghic-theme">
       <QueryClientProvider client={queryClient}>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <Router />
-        </WouterRouter>
+        <AuthProvider>
+          <ProtectedApp />
+        </AuthProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );

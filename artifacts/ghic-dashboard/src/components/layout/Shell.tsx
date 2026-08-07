@@ -24,6 +24,8 @@ import {
   Plug
 } from 'lucide-react';
 import { ThemeToggle } from '../theme-toggle';
+import { useAuth } from '@/lib/auth';
+import { LogOut } from 'lucide-react';
 
 const NAVIGATION = [
   { group: 'Overview', items: [
@@ -71,6 +73,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </div>
             <ThemeToggle />
           </div>
+
+          <AccountStrip />
 
           <div className="flex flex-col gap-6">
             {NAVIGATION.map((group, idx) => (
@@ -125,6 +129,38 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </div>
       </main>
 
+    </div>
+  );
+}
+
+/**
+ * Who is signed in, and the way out.
+ *
+ * A dashboard with no visible sign-out is a problem on any shared or
+ * borrowed machine: the session persists across reloads by design, so
+ * without this the only exit is clearing site data.
+ */
+function AccountStrip() {
+  const { user, signOut } = useAuth();
+  if (!user) return null;
+  return (
+    <div className="px-4 flex items-center gap-2 min-w-0">
+      {user.photoURL ? (
+        <img src={user.photoURL} alt="" className="w-6 h-6 border border-border shrink-0" />
+      ) : (
+        <div className="w-6 h-6 border border-border bg-muted shrink-0" />
+      )}
+      <span className="text-xs truncate flex-1 min-w-0" title={user.email || undefined}>
+        {user.displayName || user.email}
+      </span>
+      <button
+        onClick={() => void signOut()}
+        title="Sign out"
+        aria-label="Sign out"
+        className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+      >
+        <LogOut className="w-4 h-4" />
+      </button>
     </div>
   );
 }

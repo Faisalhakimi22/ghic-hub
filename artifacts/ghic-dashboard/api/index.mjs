@@ -20,6 +20,18 @@
  *      state instead of numbers that would look real and mean nothing.
  */
 
+import { AuthError, requireRole, verifyRequest } from './_lib/auth.mjs';
+import {
+  dbConfigured,
+  getOrgSettings,
+  getUser,
+  listUsers,
+  updateOrgSettings,
+  updateUserRole,
+  updateUserSettings,
+  upsertUser,
+} from './_lib/db.mjs';
+
 const GHIC_BASE =
   process.env.GHIC_API_URL || 'https://github-issue-classifier-dun.vercel.app';
 const GHIC_TOKEN = process.env.GHIC_API_TOKEN || '';
@@ -320,11 +332,6 @@ export default async function handler(req, res) {
   // client defines (approve, reject, toggle, reindex, patch) has no GHIC
   // equivalent, and inventing one would let the UI claim it did something
   // it did not.
-  if (req.method !== 'GET') {
-    res.status(405).json({ error: 'This dashboard API is read-only.' });
-    return;
-  }
-
   const url = new URL(req.url, 'http://localhost');
   // vercel.json rewrites /api/<anything> to /api/index?path=<anything>, so
   // the route arrives as a query param. Bracket catch-all filenames
@@ -337,8 +344,108 @@ export default async function handler(req, res) {
     .replace(/\/$/, '');
   const [head, ...rest] = path.split('/');
 
+  // Every endpoint is authenticated. There is no public route and no
+  // allow-list: an unauthenticated request gets 401 before any GHIC call
+  // or database query happens, so an auth bug cannot leak data through a
+  // route someone forgot to add to a list.
+  let viewer;
+  try {
+    const claims = await verifyRequest(req);
+    // The token is proof of identity; the row is the source of truth for
+    // role and settings. Upserting here is also what creates the user
+    // record on first login.
+    viewer = dbConfigured
+      ? await upsertUser(claims)
+      : { ...claims, id: claims.uid, role: 'owner', settings: {}, ephemeral: true };
+  } catch (e) {
+    res.status(e.status || 401).json({
+      error: e instanceof AuthError ? e.message : 'Authentication failed.',
+    });
+    return;
+  }
+
+  // Reading the request body for the mutating routes below.
+  async function readJson() {
+    if (req.body && typeof req.body === 'object') return req.body;
+    const chunks = [];
+    for await (const c of req) chunks.push(c);
+    try {
+      return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+    } catch {
+      const e = new Error('Request body is not valid JSON.');
+      e.status = 400;
+      throw e;
+    }
+  }
+
   try {
     let body;
+
+    // --- account and workspace -------------------------------------
+    // The only writable surface. Everything else is read-only, and
+    // deployment configuration (environment variables, thresholds, API
+    // keys) is deliberately not reachable from here at all: it is set on
+    // the server and changing it needs deploy access, not an admin role.
+    if (path === 'me') {
+      res.status(200).json(viewer);
+      return;
+    }
+    if (path === 'me/settings' && (req.method === 'PATCH' || req.method === 'PUT')) {
+      if (!dbConfigured) throw Object.assign(new Error('No database configured.'), { status: 503 });
+      const patch = await readJson();
+      // A user may change their own preferences and nothing else. Role is
+      // rejected here rather than silently dropped so a client cannot
+      // believe it escalated.
+      if ('role' in patch) {
+        throw Object.assign(new Error('Role cannot be changed from user settings.'), { status: 403 });
+      }
+      res.status(200).json(await updateUserSettings(viewer.id, patch));
+      return;
+    }
+    if (path === 'organization' && req.method === 'GET') {
+      body = dbConfigured
+        ? await getOrgSettings()
+        : unavailable('organization', 'No database configured for this deployment.');
+      res.status(200).json(body);
+      return;
+    }
+    if (path === 'organization' && (req.method === 'PATCH' || req.method === 'PUT')) {
+      if (!dbConfigured) throw Object.assign(new Error('No database configured.'), { status: 503 });
+      requireRole(viewer, 'owner');
+      res.status(200).json(await updateOrgSettings(await readJson(), viewer.id));
+      return;
+    }
+    if (path === 'organization/members' && req.method === 'GET') {
+      body = dbConfigured ? { members: await listUsers() } : { members: [] };
+      res.status(200).json(body);
+      return;
+    }
+    if (head === 'organization' && rest[0] === 'members' && rest[1] &&
+        (req.method === 'PATCH' || req.method === 'PUT')) {
+      if (!dbConfigured) throw Object.assign(new Error('No database configured.'), { status: 503 });
+      requireRole(viewer, 'owner');
+      const { role } = await readJson();
+      if (!['owner', 'admin', 'member', 'viewer'].includes(role)) {
+        throw Object.assign(new Error('Unknown role.'), { status: 400 });
+      }
+      res.status(200).json(await updateUserRole(decodeURIComponent(rest[1]), role));
+      return;
+    }
+
+    // Everything past this point is a read. The client defines several
+    // mutating routes (approve, reject, toggle, reindex) that GHIC has no
+    // equivalent for; answering them would let the UI claim it did
+    // something it did not.
+    if (req.method !== 'GET') {
+      res.status(405).json({
+        error: 'Not writable from the dashboard.',
+        detail:
+          'Only account and workspace settings can be changed here. Deployment '
+          + 'configuration is server-side.',
+      });
+      return;
+    }
+
     switch (true) {
       case path === 'dashboard/stats':
         body = await dashboardStats();

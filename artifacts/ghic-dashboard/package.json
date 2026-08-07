@@ -73,5 +73,10 @@
     "vite": "catalog:",
     "wouter": "^3.3.5",
     "zod": "catalog:"
+  },
+  "dependencies": {
+    "jose": "^5.9.6",
+    "@neondatabase/serverless": "^0.10.4",
+    "firebase": "^11.10.0"
   }
 }
