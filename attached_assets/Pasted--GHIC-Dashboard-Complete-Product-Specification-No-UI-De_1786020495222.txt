@@ -1,0 +1,940 @@
+# GHIC Dashboard — Complete Product Specification (No UI Design)
+
+You are a Principal Product Manager, Staff Software Engineer, AI Platform Architect, and UX Architect.
+
+Do NOT design the UI.
+
+Do NOT choose colors.
+
+Do NOT create layouts.
+
+Do NOT create animations.
+
+My design team will handle all visual design.
+
+Your responsibility is ONLY to define the complete functionality, information architecture, pages, routes, interactions, user flows, data models, widgets, filters, permissions, and backend integrations required for a production-grade GHIC dashboard.
+
+The dashboard should feel like the operating system for AI-powered software engineering.
+
+Think of:
+
+- GitHub
+- Linear
+- Datadog
+- Sentry
+- Grafana
+- Vercel
+- GitLab
+- Azure DevOps
+
+This is NOT an analytics dashboard.
+
+It is an Engineering Intelligence Platform.
+
+Everything should help engineering teams make decisions faster.
+
+------------------------------------------------------------
+
+# GOALS
+
+The dashboard should allow users to:
+
+• Monitor repositories
+• Monitor issues
+• Understand engineering health
+• Review AI analyses
+• Investigate regressions
+• Review historical patterns
+• Manage GitHub App installations
+• Configure AI features
+• Review automation suggestions
+• Manage organizations
+• Monitor system health
+
+------------------------------------------------------------
+
+# USER ROLES
+
+Support
+
+Owner
+
+Admin
+
+Maintainer
+
+Developer
+
+Viewer
+
+Each role should have configurable permissions.
+
+------------------------------------------------------------
+
+# AUTHENTICATION
+
+Support
+
+GitHub OAuth
+
+Organization Login
+
+Multi-user organizations
+
+Session management
+
+Profile management
+
+------------------------------------------------------------
+
+# GLOBAL NAVIGATION
+
+Dashboard
+
+Repositories
+
+Issues
+
+Engineering Intelligence
+
+Analytics
+
+Automation
+
+Search
+
+Integrations
+
+API
+
+Settings
+
+Account
+
+------------------------------------------------------------
+
+# PAGE 1
+
+Dashboard Overview
+
+Purpose
+
+Provide a complete engineering overview.
+
+Widgets
+
+Repository Health Score
+
+Engineering Risk Score
+
+Repositories Connected
+
+Open Issues
+
+Issues Today
+
+Resolved Today
+
+AI Analyses Today
+
+High Priority Issues
+
+Regressions
+
+Duplicate Candidates
+
+Repository Intelligence Status
+
+Recent Activity
+
+Recent Alerts
+
+Webhook Status
+
+Queue Status
+
+Average AI Processing Time
+
+System Status
+
+GitHub API Usage
+
+LLM Usage
+
+Embedding Usage
+
+Quick Actions
+
+------------------------------------------------------------
+
+# PAGE 2
+
+Repositories
+
+List every connected repository.
+
+Each repository displays
+
+Name
+
+Owner
+
+Visibility
+
+Language
+
+Framework
+
+Branch
+
+Repository Size
+
+Stars
+
+Forks
+
+Open Issues
+
+Contributors
+
+Health Score
+
+Risk Score
+
+Last Indexed
+
+Index Status
+
+Repository Intelligence Status
+
+Engineering Intelligence Status
+
+Webhook Status
+
+Installation Status
+
+Actions
+
+View Repository
+
+Sync Repository
+
+Reindex
+
+Disable
+
+Disconnect
+
+------------------------------------------------------------
+
+# PAGE 3
+
+Repository Details
+
+Tabs
+
+Overview
+
+Architecture
+
+Issues
+
+Commits
+
+Pull Requests
+
+Releases
+
+Analytics
+
+Components
+
+History
+
+Settings
+
+Overview
+
+Repository metadata
+
+Health
+
+Risk
+
+Framework
+
+Languages
+
+Index statistics
+
+Architecture
+
+Detected folders
+
+Detected modules
+
+Packages
+
+Dependencies
+
+Components
+
+README summary
+
+Architecture summary
+
+------------------------------------------------------------
+
+# PAGE 4
+
+Issues
+
+Advanced issue explorer.
+
+Columns
+
+Issue Number
+
+Repository
+
+Title
+
+Status
+
+Priority
+
+Severity
+
+Classification
+
+Actionability
+
+Confidence
+
+Labels
+
+Assignee
+
+Created
+
+Updated
+
+AI Status
+
+Engineering Report
+
+Filters
+
+Repository
+
+Priority
+
+Severity
+
+Status
+
+Classification
+
+Assignee
+
+Date
+
+Labels
+
+Confidence
+
+Search
+
+Bulk Actions
+
+------------------------------------------------------------
+
+# PAGE 5
+
+Issue Details
+
+Executive Summary
+
+Classification
+
+Priority
+
+Severity
+
+Confidence
+
+Repository Evidence
+
+Relevant Files
+
+Relevant Functions
+
+Relevant Components
+
+Related Commits
+
+Related Pull Requests
+
+Related Issues
+
+Root Cause Analysis
+
+Regression Signals
+
+Engineering Impact
+
+Investigation Plan
+
+Suggested Tests
+
+Suggested Labels
+
+Suggested Assignee
+
+Missing Information
+
+Timeline
+
+Evidence References
+
+Automation Suggestions
+
+------------------------------------------------------------
+
+# PAGE 6
+
+Engineering Intelligence
+
+Purpose
+
+View engineering insights.
+
+Modules
+
+Root Cause Explorer
+
+Regression Explorer
+
+Duplicate Explorer
+
+Knowledge Explorer
+
+Engineering Timeline
+
+Historical Patterns
+
+Risk Analysis
+
+------------------------------------------------------------
+
+# PAGE 7
+
+Repository Analytics
+
+Metrics
+
+Bug Density
+
+Issue Trends
+
+Resolution Time
+
+Regression Rate
+
+Duplicate Rate
+
+Issue Velocity
+
+Engineering Velocity
+
+Hotspots
+
+Component Stability
+
+Repository Health
+
+Repository Risk
+
+Release Stability
+
+Contributor Activity
+
+Commit Frequency
+
+Most Changed Files
+
+Most Fragile Components
+
+Technical Debt Indicators
+
+------------------------------------------------------------
+
+# PAGE 8
+
+Commit Intelligence
+
+List commits.
+
+Columns
+
+Commit
+
+Author
+
+Date
+
+Files Changed
+
+Related Issues
+
+Related PRs
+
+Risk
+
+Regression Signals
+
+Affected Components
+
+AI Summary
+
+------------------------------------------------------------
+
+# PAGE 9
+
+Pull Request Intelligence
+
+Columns
+
+PR
+
+Status
+
+Repository
+
+Author
+
+Related Issues
+
+Risk
+
+Review Complexity
+
+Affected Components
+
+Estimated Testing
+
+Linked Release
+
+------------------------------------------------------------
+
+# PAGE 10
+
+Release Intelligence
+
+Release history
+
+Each release displays
+
+Version
+
+Release Date
+
+Issues Introduced
+
+Issues Fixed
+
+Regression Count
+
+Risk
+
+Affected Components
+
+Health
+
+Rollback Risk
+
+------------------------------------------------------------
+
+# PAGE 11
+
+Component Explorer
+
+Every detected component.
+
+Fields
+
+Component
+
+Repository
+
+Health
+
+Risk
+
+Issue Count
+
+Regression Count
+
+Recent Commits
+
+Recent Issues
+
+Related Files
+
+Most Active Contributors
+
+------------------------------------------------------------
+
+# PAGE 12
+
+Duplicate Intelligence
+
+Show clusters.
+
+Each cluster
+
+Primary Issue
+
+Possible Duplicates
+
+Similarity
+
+Shared Components
+
+Shared Files
+
+Shared Commits
+
+Recommended Action
+
+------------------------------------------------------------
+
+# PAGE 13
+
+Regression Center
+
+List regressions.
+
+Fields
+
+Issue
+
+Confidence
+
+Related Commit
+
+Related Release
+
+Affected Files
+
+Regression Window
+
+Investigation Status
+
+------------------------------------------------------------
+
+# PAGE 14
+
+Automation Center
+
+AI Suggestions
+
+Suggested Labels
+
+Suggested Assignees
+
+Suggested Tests
+
+Suggested Investigation
+
+Suggested Fix Plan
+
+Suggested PR Draft
+
+Review Queue
+
+Approval Status
+
+------------------------------------------------------------
+
+# PAGE 15
+
+Global Search
+
+Search
+
+Repositories
+
+Issues
+
+Commits
+
+PRs
+
+Components
+
+Files
+
+Functions
+
+Labels
+
+Developers
+
+Releases
+
+Recent Searches
+
+------------------------------------------------------------
+
+# PAGE 16
+
+Notifications
+
+System Alerts
+
+Repository Alerts
+
+Webhook Failures
+
+Failed Analyses
+
+Regression Alerts
+
+Security Alerts
+
+GitHub API Limits
+
+------------------------------------------------------------
+
+# PAGE 17
+
+Integrations
+
+GitHub
+
+Slack
+
+Discord
+
+Microsoft Teams
+
+Jira
+
+Linear
+
+Azure DevOps
+
+GitLab
+
+Webhook Status
+
+Connection Status
+
+------------------------------------------------------------
+
+# PAGE 18
+
+API
+
+API Keys
+
+Rate Limits
+
+Usage
+
+Webhook Logs
+
+OpenAPI
+
+SDK Links
+
+------------------------------------------------------------
+
+# PAGE 19
+
+Organization
+
+Members
+
+Teams
+
+Repositories
+
+Roles
+
+Permissions
+
+Activity
+
+Billing
+
+------------------------------------------------------------
+
+# PAGE 20
+
+Settings
+
+General
+
+Repositories
+
+GitHub App
+
+Repository Intelligence
+
+Engineering Intelligence
+
+Automation
+
+LLM Providers
+
+Embedding Providers
+
+Feature Flags
+
+Notifications
+
+Security
+
+API Keys
+
+Danger Zone
+
+------------------------------------------------------------
+
+# PAGE 21
+
+Audit Logs
+
+Every important action.
+
+Include
+
+Timestamp
+
+User
+
+Repository
+
+Action
+
+Model Version
+
+Evidence
+
+Execution Time
+
+Result
+
+------------------------------------------------------------
+
+# PAGE 22
+
+System Health
+
+Webhook Status
+
+Queue Status
+
+Database Status
+
+Vector Store Status
+
+Embedding Provider
+
+LLM Provider
+
+Repository Intelligence
+
+Engineering Intelligence
+
+GitHub API
+
+Processing Latency
+
+Queue Length
+
+Average Response Time
+
+Failed Jobs
+
+------------------------------------------------------------
+
+# DASHBOARD REQUIREMENTS
+
+Support
+
+Real-time updates
+
+Pagination
+
+Sorting
+
+Filtering
+
+Bulk actions
+
+Saved filters
+
+Export CSV
+
+Export JSON
+
+Export Markdown
+
+Search everywhere
+
+Keyboard shortcuts
+
+Role-based permissions
+
+Organization switching
+
+Repository switching
+
+Dark mode support
+
+Responsive behavior
+
+------------------------------------------------------------
+
+# EMPTY STATES
+
+Every page must gracefully handle
+
+No repositories
+
+No issues
+
+No regressions
+
+No analytics
+
+No automation
+
+No alerts
+
+Explain what the user needs to do next.
+
+------------------------------------------------------------
+
+# BACKEND INTEGRATION
+
+Use REST APIs.
+
+Never hardcode data.
+
+Every page should fetch live information.
+
+Gracefully handle loading, errors, retries, and offline states.
+
+------------------------------------------------------------
+
+# SUCCESS CRITERIA
+
+The dashboard should function as the central operating console for GHIC.
+
+A maintainer should be able to connect repositories, monitor engineering health, investigate issues, review AI analyses, manage automation, inspect repository intelligence, and configure the platform without ever leaving the dashboard (except when opening GitHub itself).
+
+Focus entirely on functionality, workflows, and information architecture. Do not make any visual design decisions.

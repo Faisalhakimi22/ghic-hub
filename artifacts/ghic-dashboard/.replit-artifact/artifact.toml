@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "GHIC Dashboard"
+description = "GHIC — Engineering Intelligence Platform. A comprehensive dashboard for AI-powered software engineering teams to monitor repositories, investigate issues, review AI analyses, manage automation, and understand engineering health across all connected repositories."
+version = "1.0.0"
+id = "artifacts/ghic-dashboard"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22724
+
+[services.development]
+run = "pnpm --filter @workspace/ghic-dashboard run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/ghic-dashboard", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/ghic-dashboard/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22724"
+BASE_PATH = "/"

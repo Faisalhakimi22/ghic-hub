@@ -1,8 +1,40 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import dashboardRouter from "./dashboard";
+import repositoriesRouter from "./repositories";
+import issuesRouter from "./issues";
+import commitsRouter from "./commits";
+import pullRequestsRouter from "./pull-requests";
+import releasesRouter from "./releases";
+import componentsRouter from "./components";
+import intelligenceRouter from "./intelligence";
+import searchRouter from "./search";
+import notificationsRouter from "./notifications";
+import integrationsRouter from "./integrations";
+import apiKeysRouter from "./api-keys";
+import organizationRouter from "./organization";
+import settingsRouter from "./settings";
+import auditLogsRouter from "./audit-logs";
+import systemHealthRouter from "./system-health";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(dashboardRouter);
+router.use(repositoriesRouter);
+router.use(issuesRouter);
+router.use(commitsRouter);
+router.use(pullRequestsRouter);
+router.use(releasesRouter);
+router.use(componentsRouter);
+router.use(intelligenceRouter);
+router.use(searchRouter);
+router.use(notificationsRouter);
+router.use(integrationsRouter);
+router.use(apiKeysRouter);
+router.use(organizationRouter);
+router.use(settingsRouter);
+router.use(auditLogsRouter);
+router.use(systemHealthRouter);
 
 export default router;

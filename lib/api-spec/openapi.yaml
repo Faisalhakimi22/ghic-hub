@@ -3,20 +3,60 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: GHIC Engineering Intelligence Platform API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: dashboard
+    description: Dashboard overview
+  - name: repositories
+    description: Repository management
+  - name: issues
+    description: Issue management
+  - name: commits
+    description: Commit intelligence
+  - name: pullrequests
+    description: Pull request intelligence
+  - name: releases
+    description: Release intelligence
+  - name: components
+    description: Component explorer
+  - name: duplicates
+    description: Duplicate intelligence
+  - name: regressions
+    description: Regression center
+  - name: automation
+    description: Automation center
+  - name: intelligence
+    description: Engineering intelligence
+  - name: analytics
+    description: Repository analytics
+  - name: search
+    description: Global search
+  - name: notifications
+    description: Notifications
+  - name: integrations
+    description: Integrations
+  - name: apikeys
+    description: API key management
+  - name: organization
+    description: Organization management
+  - name: settings
+    description: Settings
+  - name: auditlogs
+    description: Audit logs
+  - name: systemhealth
+    description: System health
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +64,2143 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ─── Dashboard ───────────────────────────────────────────────────────────────
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [dashboard]
+      summary: Get dashboard overview statistics
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /dashboard/recent-activity:
+    get:
+      operationId: getDashboardRecentActivity
+      tags: [dashboard]
+      summary: Get recent activity feed
+      responses:
+        "200":
+          description: Recent activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
+  /dashboard/alerts:
+    get:
+      operationId: getDashboardAlerts
+      tags: [dashboard]
+      summary: Get recent alerts
+      responses:
+        "200":
+          description: Alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Alert"
+
+  # ─── Repositories ────────────────────────────────────────────────────────────
+  /repositories:
+    get:
+      operationId: listRepositories
+      tags: [repositories]
+      summary: List all connected repositories
+      parameters:
+        - in: query
+          name: page
+          schema: { type: number }
+        - in: query
+          name: limit
+          schema: { type: number }
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: language
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+      responses:
+        "200":
+          description: Repositories list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepositoryListResponse"
+
+  /repositories/{id}:
+    get:
+      operationId: getRepository
+      tags: [repositories]
+      summary: Get repository details
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Repository details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Repository"
+
+  /repositories/{id}/sync:
+    post:
+      operationId: syncRepository
+      tags: [repositories]
+      summary: Sync a repository
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Sync triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /repositories/{id}/reindex:
+    post:
+      operationId: reindexRepository
+      tags: [repositories]
+      summary: Reindex a repository
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Reindex triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /repositories/{id}/analytics:
+    get:
+      operationId: getRepositoryAnalytics
+      tags: [analytics]
+      summary: Get analytics for a repository
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: period
+          schema: { type: string }
+      responses:
+        "200":
+          description: Repository analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepositoryAnalytics"
+
+  /repositories/{id}/commits:
+    get:
+      operationId: getRepositoryCommits
+      tags: [commits]
+      summary: Get commits for a repository
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: number }
+        - in: query
+          name: limit
+          schema: { type: number }
+      responses:
+        "200":
+          description: Commits
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommitListResponse"
+
+  /repositories/{id}/pull-requests:
+    get:
+      operationId: getRepositoryPullRequests
+      tags: [pullrequests]
+      summary: Get pull requests for a repository
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: number }
+        - in: query
+          name: status
+          schema: { type: string }
+      responses:
+        "200":
+          description: Pull requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PullRequestListResponse"
+
+  /repositories/{id}/releases:
+    get:
+      operationId: getRepositoryReleases
+      tags: [releases]
+      summary: Get releases for a repository
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: number }
+      responses:
+        "200":
+          description: Releases
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReleaseListResponse"
+
+  /repositories/{id}/components:
+    get:
+      operationId: getRepositoryComponents
+      tags: [components]
+      summary: Get components for a repository
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: number }
+      responses:
+        "200":
+          description: Components
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComponentListResponse"
+
+  # ─── Issues ──────────────────────────────────────────────────────────────────
+  /issues:
+    get:
+      operationId: listIssues
+      tags: [issues]
+      summary: List all issues with filters
+      parameters:
+        - in: query
+          name: page
+          schema: { type: number }
+        - in: query
+          name: limit
+          schema: { type: number }
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: repositoryId
+          schema: { type: string }
+        - in: query
+          name: priority
+          schema: { type: string }
+        - in: query
+          name: severity
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: classification
+          schema: { type: string }
+        - in: query
+          name: assignee
+          schema: { type: string }
+        - in: query
+          name: label
+          schema: { type: string }
+        - in: query
+          name: aiStatus
+          schema: { type: string }
+      responses:
+        "200":
+          description: Issues
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssueListResponse"
+
+  /issues/{id}:
+    get:
+      operationId: getIssue
+      tags: [issues]
+      summary: Get issue details with AI analysis
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Issue detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssueDetail"
+
+  /issues/{id}/bulk-update:
+    patch:
+      operationId: bulkUpdateIssues
+      tags: [issues]
+      summary: Bulk update issues
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IssueUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Issue"
+
+  # ─── Commits ─────────────────────────────────────────────────────────────────
+  /commits:
+    get:
+      operationId: listCommits
+      tags: [commits]
+      summary: List all commits with intelligence
+      parameters:
+        - in: query
+          name: page
+          schema: { type: number }
+        - in: query
+          name: limit
+          schema: { type: number }
+        - in: query
+          name: repositoryId
+          schema: { type: string }
+        - in: query
+          name: author
+          schema: { type: string }
+        - in: query
+          name: risk
+          schema: { type: string }
+      responses:
+        "200":
+          description: Commits
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommitListResponse"
+
+  # ─── Pull Requests ────────────────────────────────────────────────────────────
+  /pull-requests:
+    get:
+      operationId: listPullRequests
+      tags: [pullrequests]
+      summary: List all pull requests
+      parameters:
+        - in: query
+          name: page
+          schema: { type: number }
+        - in: query
+          name: limit
+          schema: { type: number }
+        - in: query
+          name: repositoryId
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: author
+          schema: { type: string }
+        - in: query
+          name: risk
+          schema: { type: string }
+      responses:
+        "200":
+          description: Pull requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PullRequestListResponse"
+
+  # ─── Releases ────────────────────────────────────────────────────────────────
+  /releases:
+    get:
+      operationId: listReleases
+      tags: [releases]
+      summary: List all releases
+      parameters:
+        - in: query
+          name: page
+          schema: { type: number }
+        - in: query
+          name: repositoryId
+          schema: { type: string }
+      responses:
+        "200":
+          description: Releases
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReleaseListResponse"
+
+  # ─── Components ───────────────────────────────────────────────────────────────
+  /components:
+    get:
+      operationId: listComponents
+      tags: [components]
+      summary: List all detected components
+      parameters:
+        - in: query
+          name: page
+          schema: { type: number }
+        - in: query
+          name: limit
+          schema: { type: number }
+        - in: query
+          name: repositoryId
+          schema: { type: string }
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: health
+          schema: { type: string }
+      responses:
+        "200":
+          description: Components
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComponentListResponse"
+
+  # ─── Duplicates ───────────────────────────────────────────────────────────────
+  /duplicates:
+    get:
+      operationId: listDuplicateClusters
+      tags: [duplicates]
+      summary: List duplicate issue clusters
+      parameters:
+        - in: query
+          name: page
+          schema: { type: number }
+        - in: query
+          name: repositoryId
+          schema: { type: string }
+        - in: query
+          name: minSimilarity
+          schema: { type: number }
+      responses:
+        "200":
+          description: Duplicate clusters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DuplicateClusterListResponse"
+
+  # ─── Regressions ──────────────────────────────────────────────────────────────
+  /regressions:
+    get:
+      operationId: listRegressions
+      tags: [regressions]
+      summary: List regressions
+      parameters:
+        - in: query
+          name: page
+          schema: { type: number }
+        - in: query
+          name: repositoryId
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: confidence
+          schema: { type: string }
+      responses:
+        "200":
+          description: Regressions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegressionListResponse"
+
+  # ─── Automation ───────────────────────────────────────────────────────────────
+  /automation/suggestions:
+    get:
+      operationId: listAutomationSuggestions
+      tags: [automation]
+      summary: List AI automation suggestions
+      parameters:
+        - in: query
+          name: page
+          schema: { type: number }
+        - in: query
+          name: type
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: repositoryId
+          schema: { type: string }
+      responses:
+        "200":
+          description: Automation suggestions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationSuggestionListResponse"
+
+  /automation/suggestions/{id}/approve:
+    post:
+      operationId: approveAutomationSuggestion
+      tags: [automation]
+      summary: Approve an automation suggestion
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /automation/suggestions/{id}/reject:
+    post:
+      operationId: rejectAutomationSuggestion
+      tags: [automation]
+      summary: Reject an automation suggestion
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  # ─── Engineering Intelligence ─────────────────────────────────────────────────
+  /intelligence/summary:
+    get:
+      operationId: getIntelligenceSummary
+      tags: [intelligence]
+      summary: Get engineering intelligence summary
+      parameters:
+        - in: query
+          name: repositoryId
+          schema: { type: string }
+      responses:
+        "200":
+          description: Intelligence summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntelligenceSummary"
+
+  /intelligence/root-causes:
+    get:
+      operationId: listRootCauses
+      tags: [intelligence]
+      summary: Root cause explorer
+      parameters:
+        - in: query
+          name: page
+          schema: { type: number }
+        - in: query
+          name: repositoryId
+          schema: { type: string }
+      responses:
+        "200":
+          description: Root causes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RootCauseEntry"
+
+  /intelligence/historical-patterns:
+    get:
+      operationId: listHistoricalPatterns
+      tags: [intelligence]
+      summary: Historical patterns
+      parameters:
+        - in: query
+          name: repositoryId
+          schema: { type: string }
+        - in: query
+          name: period
+          schema: { type: string }
+      responses:
+        "200":
+          description: Historical patterns
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HistoricalPattern"
+
+  /intelligence/risk-analysis:
+    get:
+      operationId: getRiskAnalysis
+      tags: [intelligence]
+      summary: Risk analysis across repositories
+      parameters:
+        - in: query
+          name: repositoryId
+          schema: { type: string }
+      responses:
+        "200":
+          description: Risk analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RiskAnalysis"
+
+  # ─── Analytics ────────────────────────────────────────────────────────────────
+  /analytics/overview:
+    get:
+      operationId: getAnalyticsOverview
+      tags: [analytics]
+      summary: Get analytics overview across all repositories
+      parameters:
+        - in: query
+          name: repositoryId
+          schema: { type: string }
+        - in: query
+          name: period
+          schema: { type: string }
+      responses:
+        "200":
+          description: Analytics overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsOverview"
+
+  # ─── Search ───────────────────────────────────────────────────────────────────
+  /search:
+    get:
+      operationId: globalSearch
+      tags: [search]
+      summary: Global search across all entities
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema: { type: string }
+        - in: query
+          name: type
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: number }
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResults"
+
+  # ─── Notifications ────────────────────────────────────────────────────────────
+  /notifications:
+    get:
+      operationId: listNotifications
+      tags: [notifications]
+      summary: List notifications
+      parameters:
+        - in: query
+          name: page
+          schema: { type: number }
+        - in: query
+          name: type
+          schema: { type: string }
+        - in: query
+          name: unreadOnly
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationListResponse"
+
+  /notifications/{id}/read:
+    post:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark notification as read
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Marked read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  # ─── Integrations ─────────────────────────────────────────────────────────────
+  /integrations:
+    get:
+      operationId: listIntegrations
+      tags: [integrations]
+      summary: List all integrations
+      responses:
+        "200":
+          description: Integrations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Integration"
+
+  /integrations/{id}/toggle:
+    post:
+      operationId: toggleIntegration
+      tags: [integrations]
+      summary: Enable or disable an integration
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Toggled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  # ─── API Keys ─────────────────────────────────────────────────────────────────
+  /api-keys:
+    get:
+      operationId: listApiKeys
+      tags: [apikeys]
+      summary: List API keys
+      responses:
+        "200":
+          description: API keys
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApiKey"
+
+    post:
+      operationId: createApiKey
+      tags: [apikeys]
+      summary: Create a new API key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiKeyInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKey"
+
+  /api-keys/{id}:
+    delete:
+      operationId: deleteApiKey
+      tags: [apikeys]
+      summary: Delete an API key
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  # ─── Organization ─────────────────────────────────────────────────────────────
+  /organization:
+    get:
+      operationId: getOrganization
+      tags: [organization]
+      summary: Get organization details
+      responses:
+        "200":
+          description: Organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+
+  /organization/members:
+    get:
+      operationId: listMembers
+      tags: [organization]
+      summary: List organization members
+      parameters:
+        - in: query
+          name: page
+          schema: { type: number }
+        - in: query
+          name: role
+          schema: { type: string }
+      responses:
+        "200":
+          description: Members
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberListResponse"
+
+  /organization/members/{id}:
+    patch:
+      operationId: updateMember
+      tags: [organization]
+      summary: Update member role
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Member"
+
+  # ─── Settings ─────────────────────────────────────────────────────────────────
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get all settings
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+
+    patch:
+      operationId: updateSettings
+      tags: [settings]
+      summary: Update settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingsUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+
+  # ─── Audit Logs ───────────────────────────────────────────────────────────────
+  /audit-logs:
+    get:
+      operationId: listAuditLogs
+      tags: [auditlogs]
+      summary: List audit logs
+      parameters:
+        - in: query
+          name: page
+          schema: { type: number }
+        - in: query
+          name: limit
+          schema: { type: number }
+        - in: query
+          name: user
+          schema: { type: string }
+        - in: query
+          name: action
+          schema: { type: string }
+        - in: query
+          name: repositoryId
+          schema: { type: string }
+        - in: query
+          name: startDate
+          schema: { type: string }
+        - in: query
+          name: endDate
+          schema: { type: string }
+      responses:
+        "200":
+          description: Audit logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogListResponse"
+
+  # ─── System Health ────────────────────────────────────────────────────────────
+  /system-health:
+    get:
+      operationId: getSystemHealth
+      tags: [systemhealth]
+      summary: Get system health status
+      responses:
+        "200":
+          description: System health
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemHealth"
+
 components:
   schemas:
     HealthStatus:
       type: object
       properties:
-        status:
-          type: string
-      required:
-        - status
+        status: { type: string }
+      required: [status]
 
+    ActionResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+      required: [success, message]
+
+    # ─── Dashboard ────────────────────────────────────────────────────────────
+    DashboardStats:
+      type: object
+      properties:
+        repositoriesConnected: { type: number }
+        openIssues: { type: number }
+        issuesToday: { type: number }
+        resolvedToday: { type: number }
+        aiAnalysesToday: { type: number }
+        highPriorityIssues: { type: number }
+        regressions: { type: number }
+        duplicateCandidates: { type: number }
+        repositoryHealthScore: { type: number }
+        engineeringRiskScore: { type: number }
+        averageAiProcessingTime: { type: number }
+        githubApiUsage: { type: number }
+        llmUsage: { type: number }
+        embeddingUsage: { type: number }
+        queueStatus: { type: string }
+        webhookStatus: { type: string }
+      required:
+        - repositoriesConnected
+        - openIssues
+        - issuesToday
+        - resolvedToday
+        - aiAnalysesToday
+        - highPriorityIssues
+        - regressions
+        - duplicateCandidates
+        - repositoryHealthScore
+        - engineeringRiskScore
+        - averageAiProcessingTime
+        - githubApiUsage
+        - llmUsage
+        - embeddingUsage
+        - queueStatus
+        - webhookStatus
+
+    ActivityItem:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string }
+        message: { type: string }
+        repositoryName: { type: ["string", "null"] }
+        actor: { type: string }
+        timestamp: { type: string }
+        link: { type: ["string", "null"] }
+      required: [id, type, message, actor, timestamp]
+
+    Alert:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string }
+        severity: { type: string }
+        title: { type: string }
+        description: { type: string }
+        repositoryName: { type: ["string", "null"] }
+        timestamp: { type: string }
+        resolved: { type: boolean }
+      required: [id, type, severity, title, description, timestamp, resolved]
+
+    # ─── Repository ───────────────────────────────────────────────────────────
+    Repository:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        fullName: { type: string }
+        owner: { type: string }
+        visibility: { type: string }
+        language: { type: ["string", "null"] }
+        framework: { type: ["string", "null"] }
+        defaultBranch: { type: string }
+        sizeKb: { type: number }
+        stars: { type: number }
+        forks: { type: number }
+        openIssues: { type: number }
+        contributors: { type: number }
+        healthScore: { type: number }
+        riskScore: { type: number }
+        lastIndexedAt: { type: ["string", "null"] }
+        indexStatus: { type: string }
+        repositoryIntelligenceStatus: { type: string }
+        engineeringIntelligenceStatus: { type: string }
+        webhookStatus: { type: string }
+        installationStatus: { type: string }
+        description: { type: ["string", "null"] }
+        url: { type: string }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+      required:
+        - id
+        - name
+        - fullName
+        - owner
+        - visibility
+        - defaultBranch
+        - sizeKb
+        - stars
+        - forks
+        - openIssues
+        - contributors
+        - healthScore
+        - riskScore
+        - indexStatus
+        - repositoryIntelligenceStatus
+        - engineeringIntelligenceStatus
+        - webhookStatus
+        - installationStatus
+        - url
+        - createdAt
+        - updatedAt
+
+    RepositoryListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Repository"
+        total: { type: number }
+        page: { type: number }
+        limit: { type: number }
+      required: [items, total, page, limit]
+
+    RepositoryAnalytics:
+      type: object
+      properties:
+        repositoryId: { type: string }
+        bugDensity: { type: number }
+        issueVelocity: { type: number }
+        engineeringVelocity: { type: number }
+        regressionRate: { type: number }
+        duplicateRate: { type: number }
+        resolutionTimeDays: { type: number }
+        componentStability: { type: number }
+        releaseStability: { type: number }
+        issuesByDay:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeSeriesPoint"
+        resolutionsByDay:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeSeriesPoint"
+        topContributors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContributorStat"
+        mostChangedFiles:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileStat"
+        mostFragileComponents:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComponentStat"
+      required:
+        - repositoryId
+        - bugDensity
+        - issueVelocity
+        - engineeringVelocity
+        - regressionRate
+        - duplicateRate
+        - resolutionTimeDays
+        - componentStability
+        - releaseStability
+
+    TimeSeriesPoint:
+      type: object
+      properties:
+        date: { type: string }
+        value: { type: number }
+      required: [date, value]
+
+    ContributorStat:
+      type: object
+      properties:
+        login: { type: string }
+        avatarUrl: { type: ["string", "null"] }
+        commits: { type: number }
+        additions: { type: number }
+        deletions: { type: number }
+      required: [login, commits, additions, deletions]
+
+    FileStat:
+      type: object
+      properties:
+        path: { type: string }
+        changes: { type: number }
+        lastModified: { type: string }
+      required: [path, changes, lastModified]
+
+    ComponentStat:
+      type: object
+      properties:
+        name: { type: string }
+        issueCount: { type: number }
+        regressionCount: { type: number }
+        healthScore: { type: number }
+      required: [name, issueCount, regressionCount, healthScore]
+
+    # ─── Issue ────────────────────────────────────────────────────────────────
+    Issue:
+      type: object
+      properties:
+        id: { type: string }
+        number: { type: number }
+        repositoryId: { type: string }
+        repositoryName: { type: string }
+        title: { type: string }
+        status: { type: string }
+        priority: { type: string }
+        severity: { type: string }
+        classification: { type: string }
+        actionability: { type: string }
+        confidence: { type: number }
+        labels:
+          type: array
+          items: { type: string }
+        assignee: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+        aiStatus: { type: string }
+        hasEngineeringReport: { type: boolean }
+        url: { type: string }
+      required:
+        - id
+        - number
+        - repositoryId
+        - repositoryName
+        - title
+        - status
+        - priority
+        - severity
+        - classification
+        - actionability
+        - confidence
+        - labels
+        - createdAt
+        - updatedAt
+        - aiStatus
+        - hasEngineeringReport
+        - url
+
+    IssueListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Issue"
+        total: { type: number }
+        page: { type: number }
+        limit: { type: number }
+      required: [items, total, page, limit]
+
+    IssueUpdate:
+      type: object
+      properties:
+        priority: { type: string }
+        severity: { type: string }
+        assignee: { type: string }
+        status: { type: string }
+        labels:
+          type: array
+          items: { type: string }
+
+    IssueDetail:
+      type: object
+      properties:
+        issue:
+          $ref: "#/components/schemas/Issue"
+        executiveSummary: { type: string }
+        rootCauseAnalysis: { type: ["string", "null"] }
+        regressionSignals: { type: ["string", "null"] }
+        engineeringImpact: { type: ["string", "null"] }
+        investigationPlan: { type: ["string", "null"] }
+        suggestedTests:
+          type: array
+          items: { type: string }
+        suggestedLabels:
+          type: array
+          items: { type: string }
+        suggestedAssignee: { type: ["string", "null"] }
+        missingInformation: { type: ["string", "null"] }
+        relevantFiles:
+          type: array
+          items: { type: string }
+        relevantFunctions:
+          type: array
+          items: { type: string }
+        relevantComponents:
+          type: array
+          items: { type: string }
+        relatedCommits:
+          type: array
+          items:
+            $ref: "#/components/schemas/CommitRef"
+        relatedPullRequests:
+          type: array
+          items:
+            $ref: "#/components/schemas/PullRequestRef"
+        relatedIssues:
+          type: array
+          items:
+            $ref: "#/components/schemas/IssueRef"
+        timeline:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimelineEvent"
+        automationSuggestions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutomationSuggestion"
+      required:
+        - issue
+        - executiveSummary
+        - relevantFiles
+        - relevantFunctions
+        - relevantComponents
+        - relatedCommits
+        - relatedPullRequests
+        - relatedIssues
+        - timeline
+        - automationSuggestions
+        - suggestedTests
+        - suggestedLabels
+
+    CommitRef:
+      type: object
+      properties:
+        sha: { type: string }
+        message: { type: string }
+        author: { type: string }
+        date: { type: string }
+      required: [sha, message, author, date]
+
+    PullRequestRef:
+      type: object
+      properties:
+        number: { type: number }
+        title: { type: string }
+        status: { type: string }
+        url: { type: string }
+      required: [number, title, status, url]
+
+    IssueRef:
+      type: object
+      properties:
+        id: { type: string }
+        number: { type: number }
+        title: { type: string }
+        status: { type: string }
+      required: [id, number, title, status]
+
+    TimelineEvent:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string }
+        actor: { type: string }
+        description: { type: string }
+        timestamp: { type: string }
+      required: [id, type, actor, description, timestamp]
+
+    # ─── Commit ───────────────────────────────────────────────────────────────
+    Commit:
+      type: object
+      properties:
+        id: { type: string }
+        sha: { type: string }
+        shortSha: { type: string }
+        message: { type: string }
+        author: { type: string }
+        authorAvatarUrl: { type: ["string", "null"] }
+        repositoryId: { type: string }
+        repositoryName: { type: string }
+        date: { type: string }
+        filesChanged: { type: number }
+        additions: { type: number }
+        deletions: { type: number }
+        relatedIssues:
+          type: array
+          items: { type: string }
+        relatedPrs:
+          type: array
+          items: { type: string }
+        risk: { type: string }
+        regressionSignals: { type: boolean }
+        affectedComponents:
+          type: array
+          items: { type: string }
+        aiSummary: { type: ["string", "null"] }
+        url: { type: string }
+      required:
+        - id
+        - sha
+        - shortSha
+        - message
+        - author
+        - repositoryId
+        - repositoryName
+        - date
+        - filesChanged
+        - additions
+        - deletions
+        - relatedIssues
+        - relatedPrs
+        - risk
+        - regressionSignals
+        - affectedComponents
+        - url
+
+    CommitListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Commit"
+        total: { type: number }
+        page: { type: number }
+        limit: { type: number }
+      required: [items, total, page, limit]
+
+    # ─── Pull Request ─────────────────────────────────────────────────────────
+    PullRequest:
+      type: object
+      properties:
+        id: { type: string }
+        number: { type: number }
+        title: { type: string }
+        status: { type: string }
+        repositoryId: { type: string }
+        repositoryName: { type: string }
+        author: { type: string }
+        authorAvatarUrl: { type: ["string", "null"] }
+        relatedIssues:
+          type: array
+          items: { type: string }
+        risk: { type: string }
+        reviewComplexity: { type: string }
+        affectedComponents:
+          type: array
+          items: { type: string }
+        estimatedTesting: { type: string }
+        linkedRelease: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+        url: { type: string }
+      required:
+        - id
+        - number
+        - title
+        - status
+        - repositoryId
+        - repositoryName
+        - author
+        - relatedIssues
+        - risk
+        - reviewComplexity
+        - affectedComponents
+        - estimatedTesting
+        - createdAt
+        - updatedAt
+        - url
+
+    PullRequestListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PullRequest"
+        total: { type: number }
+        page: { type: number }
+        limit: { type: number }
+      required: [items, total, page, limit]
+
+    # ─── Release ──────────────────────────────────────────────────────────────
+    Release:
+      type: object
+      properties:
+        id: { type: string }
+        version: { type: string }
+        repositoryId: { type: string }
+        repositoryName: { type: string }
+        releaseDate: { type: string }
+        issuesIntroduced: { type: number }
+        issuesFixed: { type: number }
+        regressionCount: { type: number }
+        risk: { type: string }
+        affectedComponents:
+          type: array
+          items: { type: string }
+        health: { type: string }
+        rollbackRisk: { type: string }
+        url: { type: string }
+      required:
+        - id
+        - version
+        - repositoryId
+        - repositoryName
+        - releaseDate
+        - issuesIntroduced
+        - issuesFixed
+        - regressionCount
+        - risk
+        - affectedComponents
+        - health
+        - rollbackRisk
+        - url
+
+    ReleaseListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Release"
+        total: { type: number }
+        page: { type: number }
+        limit: { type: number }
+      required: [items, total, page, limit]
+
+    # ─── Component ────────────────────────────────────────────────────────────
+    Component:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        repositoryId: { type: string }
+        repositoryName: { type: string }
+        path: { type: string }
+        health: { type: string }
+        healthScore: { type: number }
+        risk: { type: string }
+        riskScore: { type: number }
+        issueCount: { type: number }
+        regressionCount: { type: number }
+        recentCommits: { type: number }
+        recentIssues: { type: number }
+        relatedFiles:
+          type: array
+          items: { type: string }
+        mostActiveContributors:
+          type: array
+          items: { type: string }
+        lastUpdated: { type: string }
+      required:
+        - id
+        - name
+        - repositoryId
+        - repositoryName
+        - path
+        - health
+        - healthScore
+        - risk
+        - riskScore
+        - issueCount
+        - regressionCount
+        - recentCommits
+        - recentIssues
+        - relatedFiles
+        - mostActiveContributors
+        - lastUpdated
+
+    ComponentListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Component"
+        total: { type: number }
+        page: { type: number }
+        limit: { type: number }
+      required: [items, total, page, limit]
+
+    # ─── Duplicate ────────────────────────────────────────────────────────────
+    DuplicateCluster:
+      type: object
+      properties:
+        id: { type: string }
+        primaryIssue:
+          $ref: "#/components/schemas/IssueRef"
+        possibleDuplicates:
+          type: array
+          items:
+            $ref: "#/components/schemas/DuplicateCandidate"
+        sharedComponents:
+          type: array
+          items: { type: string }
+        sharedFiles:
+          type: array
+          items: { type: string }
+        sharedCommits:
+          type: array
+          items: { type: string }
+        recommendedAction: { type: string }
+        createdAt: { type: string }
+      required:
+        - id
+        - primaryIssue
+        - possibleDuplicates
+        - sharedComponents
+        - sharedFiles
+        - sharedCommits
+        - recommendedAction
+        - createdAt
+
+    DuplicateCandidate:
+      type: object
+      properties:
+        issue:
+          $ref: "#/components/schemas/IssueRef"
+        similarity: { type: number }
+      required: [issue, similarity]
+
+    DuplicateClusterListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DuplicateCluster"
+        total: { type: number }
+        page: { type: number }
+        limit: { type: number }
+      required: [items, total, page, limit]
+
+    # ─── Regression ───────────────────────────────────────────────────────────
+    Regression:
+      type: object
+      properties:
+        id: { type: string }
+        issue:
+          $ref: "#/components/schemas/IssueRef"
+        confidence: { type: number }
+        relatedCommit: { type: ["string", "null"] }
+        relatedCommitSha: { type: ["string", "null"] }
+        relatedRelease: { type: ["string", "null"] }
+        affectedFiles:
+          type: array
+          items: { type: string }
+        regressionWindowStart: { type: string }
+        regressionWindowEnd: { type: string }
+        investigationStatus: { type: string }
+        repositoryId: { type: string }
+        repositoryName: { type: string }
+        detectedAt: { type: string }
+      required:
+        - id
+        - issue
+        - confidence
+        - affectedFiles
+        - regressionWindowStart
+        - regressionWindowEnd
+        - investigationStatus
+        - repositoryId
+        - repositoryName
+        - detectedAt
+
+    RegressionListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Regression"
+        total: { type: number }
+        page: { type: number }
+        limit: { type: number }
+      required: [items, total, page, limit]
+
+    # ─── Automation ───────────────────────────────────────────────────────────
+    AutomationSuggestion:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string }
+        issueId: { type: ["string", "null"] }
+        issueTitle: { type: ["string", "null"] }
+        repositoryId: { type: string }
+        repositoryName: { type: string }
+        content: { type: string }
+        status: { type: string }
+        confidence: { type: number }
+        createdAt: { type: string }
+        reviewedAt: { type: ["string", "null"] }
+        reviewedBy: { type: ["string", "null"] }
+      required:
+        - id
+        - type
+        - repositoryId
+        - repositoryName
+        - content
+        - status
+        - confidence
+        - createdAt
+
+    AutomationSuggestionListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutomationSuggestion"
+        total: { type: number }
+        page: { type: number }
+        limit: { type: number }
+      required: [items, total, page, limit]
+
+    # ─── Intelligence ─────────────────────────────────────────────────────────
+    IntelligenceSummary:
+      type: object
+      properties:
+        totalRootCauses: { type: number }
+        criticalPatterns: { type: number }
+        activeRegressions: { type: number }
+        knowledgeItems: { type: number }
+        riskLevel: { type: string }
+        topInsight: { type: ["string", "null"] }
+        engineeringHealthTrend: { type: string }
+        lastAnalysisAt: { type: ["string", "null"] }
+      required:
+        - totalRootCauses
+        - criticalPatterns
+        - activeRegressions
+        - knowledgeItems
+        - riskLevel
+        - engineeringHealthTrend
+
+    RootCauseEntry:
+      type: object
+      properties:
+        id: { type: string }
+        category: { type: string }
+        description: { type: string }
+        affectedIssues: { type: number }
+        repositoryId: { type: string }
+        repositoryName: { type: string }
+        confidence: { type: number }
+        firstSeenAt: { type: string }
+        lastSeenAt: { type: string }
+      required:
+        - id
+        - category
+        - description
+        - affectedIssues
+        - repositoryId
+        - repositoryName
+        - confidence
+        - firstSeenAt
+        - lastSeenAt
+
+    HistoricalPattern:
+      type: object
+      properties:
+        id: { type: string }
+        patternType: { type: string }
+        description: { type: string }
+        frequency: { type: string }
+        repositoryId: { type: string }
+        repositoryName: { type: string }
+        impact: { type: string }
+        occurrences: { type: number }
+        firstSeenAt: { type: string }
+        lastSeenAt: { type: string }
+      required:
+        - id
+        - patternType
+        - description
+        - frequency
+        - repositoryId
+        - repositoryName
+        - impact
+        - occurrences
+        - firstSeenAt
+        - lastSeenAt
+
+    RiskAnalysis:
+      type: object
+      properties:
+        overallRisk: { type: string }
+        overallRiskScore: { type: number }
+        repositories:
+          type: array
+          items:
+            $ref: "#/components/schemas/RepositoryRisk"
+        topRisks:
+          type: array
+          items:
+            $ref: "#/components/schemas/RiskItem"
+        trendDirection: { type: string }
+        lastCalculatedAt: { type: string }
+      required:
+        - overallRisk
+        - overallRiskScore
+        - repositories
+        - topRisks
+        - trendDirection
+        - lastCalculatedAt
+
+    RepositoryRisk:
+      type: object
+      properties:
+        repositoryId: { type: string }
+        repositoryName: { type: string }
+        riskScore: { type: number }
+        riskLevel: { type: string }
+        topRiskFactor: { type: string }
+      required: [repositoryId, repositoryName, riskScore, riskLevel, topRiskFactor]
+
+    RiskItem:
+      type: object
+      properties:
+        category: { type: string }
+        description: { type: string }
+        severity: { type: string }
+        repositoryName: { type: string }
+      required: [category, description, severity, repositoryName]
+
+    # ─── Analytics Overview ───────────────────────────────────────────────────
+    AnalyticsOverview:
+      type: object
+      properties:
+        period: { type: string }
+        totalIssues: { type: number }
+        resolvedIssues: { type: number }
+        openIssues: { type: number }
+        regressions: { type: number }
+        duplicatesFound: { type: number }
+        avgResolutionDays: { type: number }
+        issuesByPriority:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryCount"
+        issuesBySeverity:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryCount"
+        issuesByClassification:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryCount"
+        issuesByRepository:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryCount"
+        trend:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeSeriesPoint"
+      required:
+        - period
+        - totalIssues
+        - resolvedIssues
+        - openIssues
+        - regressions
+        - duplicatesFound
+        - avgResolutionDays
+        - issuesByPriority
+        - issuesBySeverity
+        - issuesByClassification
+        - issuesByRepository
+        - trend
+
+    CategoryCount:
+      type: object
+      properties:
+        category: { type: string }
+        count: { type: number }
+      required: [category, count]
+
+    # ─── Search ───────────────────────────────────────────────────────────────
+    SearchResults:
+      type: object
+      properties:
+        query: { type: string }
+        total: { type: number }
+        repositories:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchResultItem"
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchResultItem"
+        commits:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchResultItem"
+        pullRequests:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchResultItem"
+        components:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchResultItem"
+        releases:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchResultItem"
+      required:
+        - query
+        - total
+        - repositories
+        - issues
+        - commits
+        - pullRequests
+        - components
+        - releases
+
+    SearchResultItem:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string }
+        title: { type: string }
+        description: { type: ["string", "null"] }
+        repositoryName: { type: ["string", "null"] }
+        url: { type: ["string", "null"] }
+        score: { type: number }
+        timestamp: { type: ["string", "null"] }
+      required: [id, type, title, score]
+
+    # ─── Notification ─────────────────────────────────────────────────────────
+    Notification:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string }
+        severity: { type: string }
+        title: { type: string }
+        description: { type: string }
+        repositoryName: { type: ["string", "null"] }
+        read: { type: boolean }
+        timestamp: { type: string }
+        link: { type: ["string", "null"] }
+      required: [id, type, severity, title, description, read, timestamp]
+
+    NotificationListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Notification"
+        total: { type: number }
+        unread: { type: number }
+        page: { type: number }
+        limit: { type: number }
+      required: [items, total, unread, page, limit]
+
+    # ─── Integration ──────────────────────────────────────────────────────────
+    Integration:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        type: { type: string }
+        enabled: { type: boolean }
+        status: { type: string }
+        webhookUrl: { type: ["string", "null"] }
+        lastPingAt: { type: ["string", "null"] }
+        configuredAt: { type: ["string", "null"] }
+        errorMessage: { type: ["string", "null"] }
+      required: [id, name, type, enabled, status]
+
+    # ─── API Key ──────────────────────────────────────────────────────────────
+    ApiKey:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        prefix: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+        createdAt: { type: string }
+        lastUsedAt: { type: ["string", "null"] }
+        expiresAt: { type: ["string", "null"] }
+        rateLimit: { type: number }
+        usageCount: { type: number }
+      required: [id, name, prefix, scopes, createdAt, rateLimit, usageCount]
+
+    ApiKeyInput:
+      type: object
+      properties:
+        name: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+        expiresAt: { type: string }
+        rateLimit: { type: number }
+      required: [name, scopes]
+
+    # ─── Organization ─────────────────────────────────────────────────────────
+    Organization:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        avatarUrl: { type: ["string", "null"] }
+        plan: { type: string }
+        memberCount: { type: number }
+        repositoryCount: { type: number }
+        createdAt: { type: string }
+      required: [id, name, slug, plan, memberCount, repositoryCount, createdAt]
+
+    Member:
+      type: object
+      properties:
+        id: { type: string }
+        login: { type: string }
+        name: { type: ["string", "null"] }
+        email: { type: ["string", "null"] }
+        avatarUrl: { type: ["string", "null"] }
+        role: { type: string }
+        joinedAt: { type: string }
+        lastActiveAt: { type: ["string", "null"] }
+      required: [id, login, role, joinedAt]
+
+    MemberListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Member"
+        total: { type: number }
+        page: { type: number }
+        limit: { type: number }
+      required: [items, total, page, limit]
+
+    MemberUpdate:
+      type: object
+      properties:
+        role: { type: string }
+
+    # ─── Settings ─────────────────────────────────────────────────────────────
+    Settings:
+      type: object
+      properties:
+        general:
+          $ref: "#/components/schemas/GeneralSettings"
+        llmProvider: { type: string }
+        embeddingProvider: { type: string }
+        automationEnabled: { type: boolean }
+        notificationsEnabled: { type: boolean }
+        repositoryIntelligenceEnabled: { type: boolean }
+        engineeringIntelligenceEnabled: { type: boolean }
+        featureFlags:
+          type: object
+          additionalProperties: { type: boolean }
+      required:
+        - general
+        - llmProvider
+        - embeddingProvider
+        - automationEnabled
+        - notificationsEnabled
+        - repositoryIntelligenceEnabled
+        - engineeringIntelligenceEnabled
+
+    GeneralSettings:
+      type: object
+      properties:
+        organizationName: { type: string }
+        defaultBranch: { type: string }
+        timezone: { type: string }
+        language: { type: string }
+      required: [organizationName, defaultBranch, timezone, language]
+
+    SettingsUpdate:
+      type: object
+      properties:
+        llmProvider: { type: string }
+        embeddingProvider: { type: string }
+        automationEnabled: { type: boolean }
+        notificationsEnabled: { type: boolean }
+        repositoryIntelligenceEnabled: { type: boolean }
+        engineeringIntelligenceEnabled: { type: boolean }
+
+    # ─── Audit Log ────────────────────────────────────────────────────────────
+    AuditLog:
+      type: object
+      properties:
+        id: { type: string }
+        timestamp: { type: string }
+        user: { type: string }
+        userAvatarUrl: { type: ["string", "null"] }
+        repositoryName: { type: ["string", "null"] }
+        action: { type: string }
+        modelVersion: { type: ["string", "null"] }
+        evidence: { type: ["string", "null"] }
+        executionTimeMs: { type: ["number", "null"] }
+        result: { type: string }
+        ipAddress: { type: ["string", "null"] }
+      required: [id, timestamp, user, action, result]
+
+    AuditLogListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLog"
+        total: { type: number }
+        page: { type: number }
+        limit: { type: number }
+      required: [items, total, page, limit]
+
+    # ─── System Health ────────────────────────────────────────────────────────
+    SystemHealth:
+      type: object
+      properties:
+        overall: { type: string }
+        webhookStatus: { type: string }
+        queueStatus: { type: string }
+        queueLength: { type: number }
+        databaseStatus: { type: string }
+        vectorStoreStatus: { type: string }
+        embeddingProviderStatus: { type: string }
+        llmProviderStatus: { type: string }
+        repositoryIntelligenceStatus: { type: string }
+        engineeringIntelligenceStatus: { type: string }
+        githubApiStatus: { type: string }
+        githubApiRateLimit: { type: number }
+        githubApiRateLimitRemaining: { type: number }
+        processingLatencyMs: { type: number }
+        averageResponseTimeMs: { type: number }
+        failedJobsLast24h: { type: number }
+        uptimePercent: { type: number }
+        lastCheckedAt: { type: string }
+        services:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceHealth"
+      required:
+        - overall
+        - webhookStatus
+        - queueStatus
+        - queueLength
+        - databaseStatus
+        - vectorStoreStatus
+        - embeddingProviderStatus
+        - llmProviderStatus
+        - repositoryIntelligenceStatus
+        - engineeringIntelligenceStatus
+        - githubApiStatus
+        - githubApiRateLimit
+        - githubApiRateLimitRemaining
+        - processingLatencyMs
+        - averageResponseTimeMs
+        - failedJobsLast24h
+        - uptimePercent
+        - lastCheckedAt
+        - services
+
+    ServiceHealth:
+      type: object
+      properties:
+        name: { type: string }
+        status: { type: string }
+        latencyMs: { type: ["number", "null"] }
+        errorMessage: { type: ["string", "null"] }
+        lastCheckedAt: { type: string }
+      required: [name, status, lastCheckedAt]
