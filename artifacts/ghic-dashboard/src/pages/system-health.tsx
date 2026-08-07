@@ -4,6 +4,12 @@ import { PageHeader, PageContent, Grid, MetricCard, StatusBadge } from "@/compon
 import { Activity, Clock, CheckCircle2, Server, Database, Brain, GitBranch } from "lucide-react";
 import { format } from "date-fns";
 
+
+/** Null metrics render as an em dash rather than "null%". */
+function fmt(value: number | null | undefined, suffix = ''): string {
+  return value === null || value === undefined ? '—' : `${value}${suffix}`;
+}
+
 export default function SystemHealth() {
   const { data, isLoading } = useGetSystemHealth({ query: { queryKey: getGetSystemHealthQueryKey() } });
 
@@ -31,11 +37,24 @@ export default function SystemHealth() {
           <div className="h-64 bg-muted animate-pulse border border-border" />
         ) : data ? (
           <>
+            {/* GHIC does not measure uptime, queue depth, or GitHub rate
+                limit, so those arrive as null. Interpolating them straight
+                into a template rendered "null%" and "NaN%" -- worse than
+                an em dash, because it looks like a broken measurement
+                rather than an absent one. */}
             <Grid cols={4}>
-              <MetricCard title="Uptime" value={`${data.uptimePercent}%`} icon={CheckCircle2} />
-              <MetricCard title="Queue Length" value={data.queueLength} icon={Activity} />
-              <MetricCard title="Latency" value={`${data.processingLatencyMs}ms`} icon={Clock} />
-              <MetricCard title="API Limit" value={`${Math.round((data.githubApiRateLimitRemaining / data.githubApiRateLimit) * 100)}%`} icon={Server} />
+              <MetricCard title="Uptime" value={fmt(data.uptimePercent, '%')} icon={CheckCircle2} />
+              <MetricCard title="Queue Length" value={fmt(data.queueLength)} icon={Activity} />
+              <MetricCard title="Latency" value={fmt(data.processingLatencyMs, 'ms')} icon={Clock} />
+              <MetricCard
+                title="API Limit"
+                value={
+                  data.githubApiRateLimit
+                    ? `${Math.round((data.githubApiRateLimitRemaining / data.githubApiRateLimit) * 100)}%`
+                    : '—'
+                }
+                icon={Server}
+              />
             </Grid>
 
             <div className="flex flex-col gap-4">
