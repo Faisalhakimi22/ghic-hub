@@ -37,9 +37,9 @@ export default function Duplicates() {
                   ))}
                 </div>
 
-                <button className="mt-2 w-full py-2 bg-primary text-primary-foreground font-display tracking-widest uppercase text-xs font-bold hover:bg-primary/90 transition-colors">
+                <div className="mt-2 w-full py-2 border border-border bg-muted/30 text-center font-display tracking-widest uppercase text-xs font-bold text-muted-foreground">
                   {cluster.recommendedAction}
-                </button>
+                </div>
               </div>
             ))}
           </Grid>

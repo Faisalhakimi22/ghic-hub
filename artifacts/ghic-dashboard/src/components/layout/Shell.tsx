@@ -109,16 +109,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         
-        {/* User profile minimal */}
-        <div className="p-4 border-t border-border flex items-center gap-3">
-          <div className="w-8 h-8 bg-muted rounded-none flex items-center justify-center text-xs font-display font-bold">
-            AD
-          </div>
-          <div className="flex flex-col">
-            <span className="text-xs font-bold leading-tight">Admin User</span>
-            <span className="text-[10px] font-mono text-muted-foreground leading-tight">admin@ghic.io</span>
-          </div>
-        </div>
+        <AccountFooter />
       </aside>
 
       {/* Main Content Area */}
@@ -161,6 +152,36 @@ function AccountStrip() {
       >
         <LogOut className="w-4 h-4" />
       </button>
+    </div>
+  );
+}
+
+function AccountFooter() {
+  const { user } = useAuth();
+  if (!user) return null;
+  const label = user.displayName || user.email || 'Signed in';
+  const initials = label
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
+  return (
+    <div className="p-4 border-t border-border flex items-center gap-3 min-w-0">
+      {user.photoURL ? (
+        <img src={user.photoURL} alt="" className="w-8 h-8 border border-border object-cover shrink-0" />
+      ) : (
+        <div className="w-8 h-8 bg-muted flex items-center justify-center text-xs font-display font-bold shrink-0">
+          {initials}
+        </div>
+      )}
+      <div className="flex flex-col min-w-0">
+        <span className="text-xs font-bold leading-tight truncate">{label}</span>
+        <span className="text-[10px] font-mono text-muted-foreground leading-tight truncate">
+          {user.email || 'GitHub account'}
+        </span>
+      </div>
     </div>
   );
 }

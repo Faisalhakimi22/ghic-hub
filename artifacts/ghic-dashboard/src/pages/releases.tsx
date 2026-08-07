@@ -1,6 +1,6 @@
 import React from 'react';
 import { useListReleases, getListReleasesQueryKey } from "@workspace/api-client-react";
-import { PageHeader, PageContent, StatusBadge , FeatureUnavailable } from "@/components/ui/swiss";
+import { PageHeader, PageContent, StatusBadge } from "@/components/ui/swiss";
 import { format } from "date-fns";
 
 export default function Releases() {
@@ -9,9 +9,6 @@ export default function Releases() {
   return (
     <div className="flex flex-col min-h-full">
       <PageHeader title="Releases" description="Release health and rollback risk tracking" />
-      <div className="px-6 pt-6">
-        <FeatureUnavailable reason="Release data is not exposed as a list endpoint." />
-      </div>
       <PageContent>
         <div className="border border-border bg-card overflow-x-auto">
           <table className="w-full text-sm text-left">

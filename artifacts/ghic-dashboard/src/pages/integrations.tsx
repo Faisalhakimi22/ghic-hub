@@ -1,25 +1,14 @@
 import React from 'react';
-import { useListIntegrations, getListIntegrationsQueryKey, useToggleIntegration } from "@workspace/api-client-react";
-import { PageHeader, PageContent, Grid, StatusBadge , FeatureUnavailable } from "@/components/ui/swiss";
-import { useQueryClient } from "@tanstack/react-query";
-import { Power, Plug, ExternalLink } from "lucide-react";
+import { useListIntegrations, getListIntegrationsQueryKey } from "@workspace/api-client-react";
+import { PageHeader, PageContent, Grid, StatusBadge } from "@/components/ui/swiss";
+import { Plug, ExternalLink } from "lucide-react";
 
 export default function Integrations() {
-  const queryClient = useQueryClient();
   const { data, isLoading } = useListIntegrations({ query: { queryKey: getListIntegrationsQueryKey() } });
-  
-  const toggle = useToggleIntegration({
-    mutation: {
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: getListIntegrationsQueryKey() })
-    }
-  });
 
   return (
     <div className="flex flex-col min-h-full">
-      <PageHeader title="Integrations" description="Connect external services and webhooks" />
-      <div className="px-6 pt-6">
-        <FeatureUnavailable reason="No third-party integrations are configured." />
-      </div>
+      <PageHeader title="Integrations" description="Configured GHIC service connections" />
       <PageContent>
         {isLoading ? (
           <div className="h-64 bg-muted animate-pulse border border-border" />
@@ -54,19 +43,11 @@ export default function Integrations() {
                     </div>
                   )}
                 </div>
-
-                <button 
-                  onClick={() => toggle.mutate({ id: integration.id })}
-                  disabled={toggle.isPending}
-                  className={`w-full py-2.5 flex justify-center items-center gap-2 font-display tracking-widest uppercase text-xs font-bold transition-colors ${
-                    integration.enabled 
-                      ? 'border border-border text-foreground hover:bg-destructive hover:text-destructive-foreground hover:border-destructive' 
-                      : 'bg-primary text-primary-foreground hover:bg-primary/90'
-                  }`}
-                >
-                  <Power className="w-3.5 h-3.5" />
-                  {integration.enabled ? 'Disconnect' : 'Connect'}
-                </button>
+                {integration.errorMessage && (
+                  <p className="text-xs text-muted-foreground border border-border bg-muted/30 p-3">
+                    {integration.errorMessage}
+                  </p>
+                )}
               </div>
             ))}
           </Grid>

@@ -1,26 +1,14 @@
 import React from 'react';
-import { useListNotifications, getListNotificationsQueryKey, useMarkNotificationRead } from "@workspace/api-client-react";
-import { PageHeader, PageContent, StatusBadge , FeatureUnavailable } from "@/components/ui/swiss";
+import { useListNotifications, getListNotificationsQueryKey } from "@workspace/api-client-react";
+import { PageHeader, PageContent, StatusBadge } from "@/components/ui/swiss";
 import { format } from "date-fns";
-import { useQueryClient } from "@tanstack/react-query";
-import { Check } from "lucide-react";
 
 export default function Notifications() {
-  const queryClient = useQueryClient();
   const { data, isLoading } = useListNotifications({}, { query: { queryKey: getListNotificationsQueryKey() } });
-  
-  const markRead = useMarkNotificationRead({
-    mutation: {
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: getListNotificationsQueryKey() })
-    }
-  });
 
   return (
     <div className="flex flex-col min-h-full">
-      <PageHeader title="Notifications" description="System and repository alerts" />
-      <div className="px-6 pt-6">
-        <FeatureUnavailable reason="GHIC does not have a notifications system. Operational alerts appear on the dashboard instead." />
-      </div>
+      <PageHeader title="Notifications" description="Operational alerts derived from live GHIC health" />
       <PageContent className="max-w-4xl">
         {isLoading ? (
           <div className="h-64 bg-muted animate-pulse border border-border" />
@@ -45,15 +33,6 @@ export default function Notifications() {
                   </div>
                   <div className="flex flex-col items-end gap-2 shrink-0">
                     <span className="text-[10px] text-muted-foreground font-mono">{format(new Date(notif.timestamp), 'MMM d, HH:mm')}</span>
-                    {!notif.read && (
-                      <button 
-                        onClick={() => markRead.mutate({ id: notif.id })}
-                        disabled={markRead.isPending}
-                        className="text-[10px] font-display uppercase tracking-widest font-bold flex items-center gap-1 text-primary hover:text-primary/80 transition-colors"
-                      >
-                        <Check className="w-3 h-3" /> Mark Read
-                      </button>
-                    )}
                   </div>
                 </div>
               </div>

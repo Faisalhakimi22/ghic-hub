@@ -1,6 +1,6 @@
 import React from 'react';
 import { useListIssues, getListIssuesQueryKey } from "@workspace/api-client-react";
-import { PageHeader, PageContent, StatusBadge , FeatureUnavailable } from "@/components/ui/swiss";
+import { PageHeader, PageContent, StatusBadge } from "@/components/ui/swiss";
 import { Link } from "wouter";
 
 export default function Issues() {
@@ -8,10 +8,7 @@ export default function Issues() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <PageHeader title="Issue Explorer" description="Advanced filterable issue intelligence" />
-      <div className="px-6 pt-6">
-        <FeatureUnavailable reason="GHIC stores predictions rather than issue records. Recently scored issues appear on the dashboard." />
-      </div>
+      <PageHeader title="Issue Explorer" description="Recent issues scored by GHIC" />
       <PageContent>
         <div className="border border-border bg-card">
           <div className="overflow-x-auto">
@@ -20,14 +17,15 @@ export default function Issues() {
                 <tr>
                   <th className="px-4 py-3 font-display tracking-widest uppercase text-[10px] text-muted-foreground font-bold">Issue</th>
                   <th className="px-4 py-3 font-display tracking-widest uppercase text-[10px] text-muted-foreground font-bold">Repository</th>
-                  <th className="px-4 py-3 font-display tracking-widest uppercase text-[10px] text-muted-foreground font-bold">Title</th>
+                  <th className="px-4 py-3 font-display tracking-widest uppercase text-[10px] text-muted-foreground font-bold">Prediction</th>
+                  <th className="px-4 py-3 font-display tracking-widest uppercase text-[10px] text-muted-foreground font-bold">Confidence</th>
                   <th className="px-4 py-3 font-display tracking-widest uppercase text-[10px] text-muted-foreground font-bold">Priority</th>
                   <th className="px-4 py-3 font-display tracking-widest uppercase text-[10px] text-muted-foreground font-bold">AI Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {isLoading ? (
-                  <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground animate-pulse">Loading issues...</td></tr>
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground animate-pulse">Loading issues...</td></tr>
                 ) : data?.items?.length ? (
                   data.items.map((issue) => (
                     <tr key={issue.id} className="hover:bg-muted/30 transition-colors group">
@@ -36,8 +34,9 @@ export default function Issues() {
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{issue.repositoryName}</td>
                       <td className="px-4 py-3 font-medium">
-                        <Link href={`/issues/${issue.id}`} className="group-hover:text-primary transition-colors">{issue.title}</Link>
+                        <Link href={`/issues/${issue.id}`} className="group-hover:text-primary transition-colors">{issue.classification}</Link>
                       </td>
+                      <td className="px-4 py-3 font-mono text-xs">{Math.round(issue.confidence * 100)}%</td>
                       <td className="px-4 py-3">
                         <StatusBadge status={issue.priority === 'high' || issue.priority === 'critical' ? 'danger' : 'neutral'} text={issue.priority} />
                       </td>
@@ -47,7 +46,7 @@ export default function Issues() {
                     </tr>
                   ))
                 ) : (
-                  <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No issues found.</td></tr>
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No issues found.</td></tr>
                 )}
               </tbody>
             </table>

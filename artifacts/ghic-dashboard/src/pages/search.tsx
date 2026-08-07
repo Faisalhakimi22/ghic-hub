@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useGlobalSearch, getGlobalSearchQueryKey } from "@workspace/api-client-react";
-import { PageHeader, PageContent, Grid , FeatureUnavailable } from "@/components/ui/swiss";
+import { PageHeader, PageContent } from "@/components/ui/swiss";
 import { Search as SearchIcon, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -20,10 +20,7 @@ export default function Search() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <PageHeader title="Global Search" description="Search across all entities" />
-      <div className="px-6 pt-6">
-        <FeatureUnavailable reason="Cross-repository search is not exposed yet." />
-      </div>
+      <PageHeader title="Global Search" description="Search repositories and recent scored issues" />
       <PageContent className="flex flex-col gap-8 max-w-4xl">
         <div className="relative">
           <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />

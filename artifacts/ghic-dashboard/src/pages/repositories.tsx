@@ -4,6 +4,16 @@ import { PageHeader, PageContent, StatusBadge } from "@/components/ui/swiss";
 import { Link } from "wouter";
 import { format } from "date-fns";
 
+function score(value: number | null | undefined) {
+  return typeof value === 'number' ? value : '—';
+}
+
+function scoreClass(value: number | null | undefined, highGood = true) {
+  if (typeof value !== 'number') return 'text-muted-foreground';
+  if (highGood) return value >= 80 ? 'text-primary' : value >= 50 ? 'text-amber-500' : 'text-destructive';
+  return value >= 70 ? 'text-destructive' : value >= 30 ? 'text-amber-500' : 'text-primary';
+}
+
 export default function Repositories() {
   const { data, isLoading } = useListRepositories({}, { query: { queryKey: getListRepositoriesQueryKey() } });
 
@@ -43,20 +53,20 @@ export default function Repositories() {
                         </Link>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`font-mono ${repo.healthScore >= 80 ? 'text-primary' : repo.healthScore >= 50 ? 'text-amber-500' : 'text-destructive'}`}>
-                          {repo.healthScore}
+                        <span className={`font-mono ${scoreClass(repo.healthScore)}`}>
+                          {score(repo.healthScore)}
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`font-mono ${repo.riskScore >= 70 ? 'text-destructive' : repo.riskScore >= 30 ? 'text-amber-500' : 'text-primary'}`}>
-                          {repo.riskScore}
+                        <span className={`font-mono ${scoreClass(repo.riskScore, false)}`}>
+                          {score(repo.riskScore)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{repo.language || '-'}</td>
                       <td className="px-4 py-3 font-mono">{repo.openIssues}</td>
                       <td className="px-4 py-3">
                         <StatusBadge 
-                          status={repo.indexStatus === 'completed' ? 'success' : repo.indexStatus === 'failed' ? 'danger' : 'neutral'} 
+                          status={repo.indexStatus === 'ready' || repo.indexStatus === 'updating' ? 'success' : repo.indexStatus === 'failed' ? 'danger' : 'neutral'} 
                           text={repo.indexStatus} 
                         />
                       </td>
