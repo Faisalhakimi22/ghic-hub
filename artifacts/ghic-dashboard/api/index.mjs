@@ -303,7 +303,15 @@ export default async function handler(req, res) {
   }
 
   const url = new URL(req.url, 'http://localhost');
-  const path = url.pathname.replace(/^\/api\/?/, '').replace(/\/$/, '');
+  // vercel.json rewrites /api/<anything> to /api/index?path=<anything>, so
+  // the route arrives as a query param. Bracket catch-all filenames
+  // (`[...path].mjs`) are a Next.js convention and do not match nested
+  // paths in a plain Vite project: /api/system-health resolved while
+  // /api/dashboard/alerts returned NOT_FOUND. The pathname fallback keeps
+  // direct invocation and local testing working.
+  const path = (url.searchParams.get('path') || url.pathname.replace(/^\/api\/?/, ''))
+    .replace(/^\/+/, '')
+    .replace(/\/$/, '');
   const [head, ...rest] = path.split('/');
 
   try {
