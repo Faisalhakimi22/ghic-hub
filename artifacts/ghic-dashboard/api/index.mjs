@@ -227,27 +227,44 @@ async function alerts() {
 }
 
 async function systemHealth() {
-  const h = await ghic('/healthz', { token: false });
+  const [healthRes, statsRes] = await Promise.allSettled([
+    ghic('/healthz', { token: false }),
+    ghic('/stats'),
+  ]);
+  const h = healthRes.status === 'fulfilled' ? healthRes.value : {};
+  const s = statsRes.status === 'fulfilled' ? statsRes.value : {};
   const ri = h.repository_intelligence || {};
+  const latency = (s.latency && (s.latency['/webhook'] || s.latency['POST /webhook'])) || {};
+
+  // Matches the SystemHealth schema the page renders. Subsystems GHIC does
+  // not expose a probe for are reported as "unknown" rather than "healthy":
+  // claiming a green light we never checked is worse than admitting we
+  // cannot see it.
+  const up = h.status === 'ok';
   return {
-    status: h.status === 'ok' ? 'healthy' : 'degraded',
-    version: h.version || 'unknown',
-    model: h.model || 'unknown',
-    dryRun: Boolean(h.dry_run),
-    components: [
-      { name: 'Webhook', status: h.status === 'ok' ? 'healthy' : 'degraded' },
-      { name: 'Model', status: h.model ? 'healthy' : 'degraded', detail: h.model },
-      {
-        name: 'Repository intelligence',
-        status: ri.enabled ? (ri.can_index ? 'healthy' : 'degraded') : 'disabled',
-        detail: ri.enabled ? `${ri.vector_provider} vectors` : 'not enabled',
-      },
-      {
-        name: 'Index queue',
-        status: ri.queue_durable ? 'healthy' : 'disabled',
-        detail: ri.queue || 'none',
-      },
-    ],
+    overall: up ? 'healthy' : 'degraded',
+    webhookStatus: up ? 'healthy' : 'degraded',
+    queueStatus: ri.queue_durable ? 'healthy' : 'unknown',
+    queueLength: null,
+    databaseStatus: ri.state_durable ? 'healthy' : 'unknown',
+    vectorStoreStatus:
+      ri.enabled ? (ri.vector_provider === 'postgres' ? 'healthy' : 'degraded') : 'unknown',
+    embeddingProviderStatus: ri.enabled ? 'healthy' : 'unknown',
+    llmProviderStatus: 'unknown',
+    repositoryIntelligenceStatus: ri.enabled
+      ? (ri.can_index ? 'healthy' : 'degraded')
+      : 'disabled',
+    engineeringIntelligenceStatus: 'unknown',
+    githubApiStatus: up ? 'healthy' : 'unknown',
+    githubApiRateLimit: null,
+    githubApiRateLimitRemaining: null,
+    processingLatencyMs: num(latency.p50, null),
+    averageResponseTimeMs: num(latency.mean_ms ?? latency.p50, null),
+    failedJobsLast24h: null,
+    uptimePercent: null,
+    lastCheckedAt: new Date().toISOString(),
+    version: h.version || null,
+    model: h.model || null,
   };
 }
 
