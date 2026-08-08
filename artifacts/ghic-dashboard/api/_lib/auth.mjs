@@ -25,14 +25,16 @@
  * verification with an environment variable: an auth check that can be
  * switched off is one that eventually is.
  */
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
-const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || '';
+const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || "";
 
 // Google's JWKS for Firebase ID tokens. createRemoteJWKSet caches and
 // re-fetches on key rotation, so this is created once per cold start.
 const JWKS = createRemoteJWKSet(
-  new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'),
+  new URL(
+    "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com",
+  ),
 );
 
 export class AuthError extends Error {
@@ -43,9 +45,9 @@ export class AuthError extends Error {
 }
 
 function bearerFrom(req) {
-  const header = req.headers?.authorization || req.headers?.Authorization || '';
+  const header = req.headers?.authorization || req.headers?.Authorization || "";
   const match = /^Bearer\s+(.+)$/i.exec(String(header).trim());
-  return match ? match[1] : '';
+  return match ? match[1] : "";
 }
 
 /**
@@ -60,34 +62,34 @@ export async function verifyRequest(req) {
     // requests through, the first deploy without this variable would be an
     // open API and nothing would say so.
     throw new AuthError(
-      'FIREBASE_PROJECT_ID is not configured on this deployment; refusing to authenticate.',
+      "FIREBASE_PROJECT_ID is not configured on this deployment; refusing to authenticate.",
       500,
     );
   }
 
   const token = bearerFrom(req);
-  if (!token) throw new AuthError('Missing bearer token.');
+  if (!token) throw new AuthError("Missing bearer token.");
 
   let payload;
   try {
     ({ payload } = await jwtVerify(token, JWKS, {
       issuer: `https://securetoken.google.com/${PROJECT_ID}`,
       audience: PROJECT_ID,
-      algorithms: ['RS256'],
+      algorithms: ["RS256"],
     }));
   } catch (e) {
     throw new AuthError(`Invalid token: ${e.code || e.message}`);
   }
 
   const uid = payload.sub;
-  if (!uid) throw new AuthError('Token has no subject.');
+  if (!uid) throw new AuthError("Token has no subject.");
 
   // firebase.identities carries the provider identifiers; GitHub sign-in
   // puts the numeric GitHub user id here. Absent for other providers, which
   // is why the column is nullable.
   const identities = payload.firebase?.identities || {};
-  const githubId = Array.isArray(identities['github.com'])
-    ? String(identities['github.com'][0])
+  const githubId = Array.isArray(identities["github.com"])
+    ? String(identities["github.com"][0])
     : null;
 
   return {
@@ -101,10 +103,10 @@ export async function verifyRequest(req) {
 }
 
 /** Roles, ordered least to most privileged. */
-export const ROLES = ['viewer', 'member', 'admin', 'owner'];
+export const ROLES = ["viewer", "member", "admin", "owner"];
 
 export function rankOf(role) {
-  const i = ROLES.indexOf(String(role || '').toLowerCase());
+  const i = ROLES.indexOf(String(role || "").toLowerCase());
   return i < 0 ? 0 : i;
 }
 
@@ -119,5 +121,24 @@ export function requireRole(user, required) {
       `This action requires the ${required} role; your role is ${user.role}.`,
       403,
     );
+  }
+}
+
+/** Enforce the role hierarchy for workspace member administration. */
+export function requireRoleChange(actor, target, nextRole) {
+  if (!ROLES.includes(nextRole)) {
+    throw new AuthError("Unknown role.", 400);
+  }
+  if (actor.role === "owner") return;
+  if (actor.role !== "admin") {
+    throw new AuthError("This action requires the admin or owner role.", 403);
+  }
+  if (
+    target.role === "owner" ||
+    target.role === "admin" ||
+    nextRole === "owner" ||
+    nextRole === "admin"
+  ) {
+    throw new AuthError("Admins may manage member and viewer roles only.", 403);
   }
 }

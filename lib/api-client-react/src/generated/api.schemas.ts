@@ -15,23 +15,25 @@ export interface ActionResult {
 }
 
 export interface DashboardStats {
-  repositoriesConnected: number;
-  openIssues: number;
-  issuesToday: number;
-  resolvedToday: number;
-  aiAnalysesToday: number;
+  trackedRepositories: number;
+  indexedRepositories: number;
+  issuesScored: number;
+  bugsDetected: number;
+  analysesCompleted: number;
+  analysesLast24Hours: number;
   highPriorityIssues: number;
-  regressions: number;
-  duplicateCandidates: number;
-  repositoryHealthScore: number;
-  engineeringRiskScore: number;
-  averageAiProcessingTime: number;
-  githubApiUsage: number;
-  llmUsage: number;
-  embeddingUsage: number;
-  queueStatus: string;
-  webhookStatus: string;
+  maintainerReviewIssues: number;
+  activeAlerts: number;
+  /** @nullable */
+  retrievalSuccessRate: number | null;
+  /** @nullable */
+  averageAnalysisLatencyMs: number | null;
+  openIssues: number;
+  resolvedIssues: number;
+  commentsPosted: number;
 }
+
+export type DashboardOverviewRuntime = { [key: string]: unknown };
 
 export interface ActivityItem {
   id: string;
@@ -57,6 +59,77 @@ export interface Alert {
   resolved: boolean;
 }
 
+export interface Issue {
+  id: string;
+  number: number;
+  repositoryId: string;
+  repositoryName: string;
+  /** @nullable */
+  title: string | null;
+  status: string;
+  /** @nullable */
+  priority: string | null;
+  /** @nullable */
+  severity: string | null;
+  classification: string;
+  actionability: string;
+  confidence: number;
+  statisticalScore: number;
+  /** @nullable */
+  threshold?: number | null;
+  /** @nullable */
+  llmConfidence?: number | null;
+  /** @nullable */
+  riskLevel?: string | null;
+  labels: string[];
+  /** @nullable */
+  assignee?: string | null;
+  /** @nullable */
+  createdAt: string | null;
+  /** @nullable */
+  updatedAt: string | null;
+  /** @nullable */
+  analysisTimestamp?: string | null;
+  aiStatus: string;
+  hasEngineeringReport: boolean;
+  url: string;
+  /** @nullable */
+  summary?: string | null;
+  /** @nullable */
+  finalVerdict?: string | null;
+  /** @nullable */
+  recommendedAction?: string | null;
+  repositoryEvidenceStatus: string;
+  /** @nullable */
+  repositoryEvidenceNote?: string | null;
+  relevantFiles: string[];
+  relevantFunctions: string[];
+  needsMaintainerReview: boolean;
+  reviewReasons: string[];
+  commentPosted: boolean;
+  /** @nullable */
+  analysisLatencyMs?: number | null;
+}
+
+export interface RepositoryIndexStatus {
+  id: string;
+  fullName: string;
+  status: string;
+  chunkCount: number;
+  fileCount: number;
+  /** @nullable */
+  lastIndexedAt: string | null;
+}
+
+export interface DashboardOverview {
+  stats: DashboardStats;
+  recentActivity: ActivityItem[];
+  alerts: Alert[];
+  recentAnalyses: Issue[];
+  repositoryIndexing: RepositoryIndexStatus[];
+  runtime: DashboardOverviewRuntime;
+}
+
 export interface Repository {
   id: string;
   name: string;
@@ -67,14 +140,19 @@ export interface Repository {
   language?: string | null;
   /** @nullable */
   framework?: string | null;
-  defaultBranch: string;
-  sizeKb: number;
-  stars: number;
-  forks: number;
-  openIssues: number;
-  contributors: number;
-  healthScore: number;
-  riskScore: number;
+  /** @nullable */
+  defaultBranch: string | null;
+  sizeKb?: number;
+  stars?: number;
+  forks?: number;
+  /** @nullable */
+  openIssues: number | null;
+  contributors?: number;
+  health: string;
+  /** @nullable */
+  healthScore: number | null;
+  /** @nullable */
+  riskScore: number | null;
   /** @nullable */
   lastIndexedAt?: string | null;
   indexStatus: string;
@@ -85,15 +163,44 @@ export interface Repository {
   /** @nullable */
   description?: string | null;
   url: string;
-  createdAt: string;
-  updatedAt: string;
+  /** @nullable */
+  createdAt: string | null;
+  /** @nullable */
+  updatedAt: string | null;
+  indexedCommitSha: string;
+  chunkCount: number;
+  fileCount: number;
+  countMismatch: boolean;
+  /** @nullable */
+  embeddingProvider?: string | null;
+  /** @nullable */
+  embeddingModel?: string | null;
+  /** @nullable */
+  embeddingDimensions?: number | null;
+  /** @nullable */
+  embeddingSignature?: string | null;
+  /** @nullable */
+  vectorBackend?: string | null;
+  retrievalCount: number;
+  retrievalHitCount: number;
+  /** @nullable */
+  retrievalHitRate?: number | null;
+  /** @nullable */
+  indexDurationSeconds?: number | null;
+  architectureSummary: string;
+  hasIndexError: boolean;
+  /** @nullable */
+  operationalMessage?: string | null;
 }
 
 export interface RepositoryListResponse {
   items: Repository[];
   total: number;
+  indexedTotal: number;
   page: number;
   limit: number;
+  available?: boolean;
+  reason?: string;
 }
 
 export interface TimeSeriesPoint {
@@ -140,33 +247,13 @@ export interface RepositoryAnalytics {
   mostFragileComponents?: ComponentStat[];
 }
 
-export interface Issue {
-  id: string;
-  number: number;
-  repositoryId: string;
-  repositoryName: string;
-  title: string;
-  status: string;
-  priority: string;
-  severity: string;
-  classification: string;
-  actionability: string;
-  confidence: number;
-  labels: string[];
-  /** @nullable */
-  assignee?: string | null;
-  createdAt: string;
-  updatedAt: string;
-  aiStatus: string;
-  hasEngineeringReport: boolean;
-  url: string;
-}
-
 export interface IssueListResponse {
   items: Issue[];
   total: number;
   page: number;
   limit: number;
+  available?: boolean;
+  reason?: string;
 }
 
 export interface IssueUpdate {
@@ -176,6 +263,8 @@ export interface IssueUpdate {
   status?: string;
   labels?: string[];
 }
+
+export type IssueDetailEvidenceChunksItem = { [key: string]: unknown };
 
 export interface CommitRef {
   sha: string;
@@ -194,8 +283,11 @@ export interface PullRequestRef {
 export interface IssueRef {
   id: string;
   number: number;
-  title: string;
+  /** @nullable */
+  title: string | null;
   status: string;
+  /** @nullable */
+  similarity?: number | null;
 }
 
 export interface TimelineEvent {
@@ -250,6 +342,14 @@ export interface IssueDetail {
   relatedIssues: IssueRef[];
   timeline: TimelineEvent[];
   automationSuggestions: AutomationSuggestion[];
+  reasoning?: string[];
+  riskReasons?: string[];
+  businessImpact?: string[];
+  repositoryEvidenceStatus?: string;
+  /** @nullable */
+  repositoryEvidenceNote?: string | null;
+  evidenceChunks?: IssueDetailEvidenceChunksItem[];
+  reviewReasons?: string[];
 }
 
 export interface Commit {
@@ -363,7 +463,8 @@ export interface ComponentListResponse {
 
 export interface DuplicateCandidate {
   issue: IssueRef;
-  similarity: number;
+  /** @nullable */
+  similarity: number | null;
 }
 
 export interface DuplicateCluster {
@@ -374,7 +475,9 @@ export interface DuplicateCluster {
   sharedFiles: string[];
   sharedCommits: string[];
   recommendedAction: string;
-  createdAt: string;
+  repositoryName: string;
+  /** @nullable */
+  createdAt: string | null;
 }
 
 export interface DuplicateClusterListResponse {
@@ -487,11 +590,19 @@ export interface CategoryCount {
 export interface AnalyticsOverview {
   period: string;
   totalIssues: number;
+  analyzedIssues: number;
   resolvedIssues: number;
   openIssues: number;
-  regressions: number;
+  bugsDetected: number;
+  /** @nullable */
+  regressions: number | null;
   duplicatesFound: number;
-  avgResolutionDays: number;
+  /** @nullable */
+  avgResolutionDays: number | null;
+  /** @nullable */
+  averageAnalysisLatencyMs: number | null;
+  /** @nullable */
+  retrievalSuccessRate: number | null;
   issuesByPriority: CategoryCount[];
   issuesBySeverity: CategoryCount[];
   issuesByClassification: CategoryCount[];
@@ -509,7 +620,9 @@ export interface SearchResultItem {
   repositoryName?: string | null;
   /** @nullable */
   url?: string | null;
-  score: number;
+  /** @nullable */
+  score: number | null;
+  matchType?: string;
   /** @nullable */
   timestamp?: string | null;
 }
@@ -519,6 +632,7 @@ export interface SearchResults {
   total: number;
   repositories: SearchResultItem[];
   issues: SearchResultItem[];
+  code: SearchResultItem[];
   commits: SearchResultItem[];
   pullRequests: SearchResultItem[];
   components: SearchResultItem[];
@@ -584,16 +698,101 @@ export interface ApiKeyInput {
   rateLimit?: number;
 }
 
+export type DashboardAccountRole = typeof DashboardAccountRole[keyof typeof DashboardAccountRole];
+
+
+export const DashboardAccountRole = {
+  viewer: 'viewer',
+  member: 'member',
+  admin: 'admin',
+  owner: 'owner',
+} as const;
+
+export type DashboardAccountSettingsTheme = typeof DashboardAccountSettingsTheme[keyof typeof DashboardAccountSettingsTheme];
+
+
+export const DashboardAccountSettingsTheme = {
+  system: 'system',
+  light: 'light',
+  dark: 'dark',
+} as const;
+
+export type DashboardAccountSettingsEmailPreferences = {
+  productUpdates: boolean;
+  weeklyDigest: boolean;
+};
+
+export type DashboardAccountSettingsNotificationPreferences = {
+  criticalAlerts: boolean;
+  regressions: boolean;
+  duplicates: boolean;
+};
+
+export interface DashboardAccountSettings {
+  /** @nullable */
+  displayName: string | null;
+  /** @nullable */
+  avatarUrl: string | null;
+  theme: DashboardAccountSettingsTheme;
+  timezone: string;
+  emailPreferences: DashboardAccountSettingsEmailPreferences;
+  notificationPreferences: DashboardAccountSettingsNotificationPreferences;
+}
+
+export interface DashboardAccount {
+  id: string;
+  /** @nullable */
+  name: string | null;
+  /** @nullable */
+  email: string | null;
+  /** @nullable */
+  avatarUrl: string | null;
+  role: DashboardAccountRole;
+  settings: DashboardAccountSettings;
+  /** @nullable */
+  createdAt?: string | null;
+  /** @nullable */
+  lastLogin?: string | null;
+}
+
+export type DashboardAccountSettingsPatchTheme = typeof DashboardAccountSettingsPatchTheme[keyof typeof DashboardAccountSettingsPatchTheme];
+
+
+export const DashboardAccountSettingsPatchTheme = {
+  system: 'system',
+  light: 'light',
+  dark: 'dark',
+} as const;
+
+export type DashboardAccountSettingsPatchEmailPreferences = {[key: string]: boolean};
+
+export type DashboardAccountSettingsPatchNotificationPreferences = {[key: string]: boolean};
+
+export interface DashboardAccountSettingsPatch {
+  /** @nullable */
+  displayName?: string | null;
+  /** @nullable */
+  avatarUrl?: string | null;
+  theme?: DashboardAccountSettingsPatchTheme;
+  timezone?: string;
+  emailPreferences?: DashboardAccountSettingsPatchEmailPreferences;
+  notificationPreferences?: DashboardAccountSettingsPatchNotificationPreferences;
+}
+
 export interface Organization {
   id: string;
   name: string;
+  workspaceName: string;
   slug: string;
   /** @nullable */
   avatarUrl?: string | null;
   plan: string;
   memberCount: number;
   repositoryCount: number;
-  createdAt: string;
+  /** @nullable */
+  createdAt: string | null;
+  /** @nullable */
+  updatedAt: string | null;
 }
 
 export interface Member {
@@ -606,7 +805,8 @@ export interface Member {
   /** @nullable */
   avatarUrl?: string | null;
   role: string;
-  joinedAt: string;
+  /** @nullable */
+  joinedAt: string | null;
   /** @nullable */
   lastActiveAt?: string | null;
 }
@@ -692,22 +892,38 @@ export interface SystemHealth {
   overall: string;
   webhookStatus: string;
   queueStatus: string;
-  queueLength: number;
+  /** @nullable */
+  queueLength: number | null;
   databaseStatus: string;
   vectorStoreStatus: string;
   embeddingProviderStatus: string;
   llmProviderStatus: string;
   repositoryIntelligenceStatus: string;
   engineeringIntelligenceStatus: string;
+  automationStatus: string;
+  /** @nullable */
+  autoIndex: boolean | null;
   githubApiStatus: string;
-  githubApiRateLimit: number;
-  githubApiRateLimitRemaining: number;
-  processingLatencyMs: number;
-  averageResponseTimeMs: number;
-  failedJobsLast24h: number;
-  uptimePercent: number;
+  /** @nullable */
+  githubApiRateLimit: number | null;
+  /** @nullable */
+  githubApiRateLimitRemaining: number | null;
+  /** @nullable */
+  processingLatencyMs: number | null;
+  /** @nullable */
+  averageResponseTimeMs: number | null;
+  /** @nullable */
+  failedJobsLast24h: number | null;
+  /** @nullable */
+  uptimePercent: number | null;
   lastCheckedAt: string;
-  services: ServiceHealth[];
+  /** @nullable */
+  version?: string | null;
+  /** @nullable */
+  model?: string | null;
+  /** @nullable */
+  embeddingSignature?: string | null;
+  services?: ServiceHealth[];
 }
 
 export type ListRepositoriesParams = {
@@ -837,6 +1053,10 @@ export type ListNotificationsParams = {
 page?: number;
 type?: string;
 unreadOnly?: boolean;
+};
+
+export type UpdateOrganizationBody = {
+  workspaceName: string;
 };
 
 export type ListMembersParams = {

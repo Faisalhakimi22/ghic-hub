@@ -7,6 +7,8 @@ info:
 servers:
   - url: /api
     description: Base API path
+security:
+  - firebaseBearer: []
 tags:
   - name: health
     description: Health operations
@@ -66,6 +68,19 @@ paths:
                 $ref: "#/components/schemas/HealthStatus"
 
   # ─── Dashboard ───────────────────────────────────────────────────────────────
+  /dashboard/overview:
+    get:
+      operationId: getDashboardOverview
+      tags: [dashboard]
+      summary: Get the authenticated dashboard in one request
+      responses:
+        "200":
+          description: Live dashboard overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardOverview"
+
   /dashboard/stats:
     get:
       operationId: getDashboardStats
@@ -876,6 +891,38 @@ paths:
                 $ref: "#/components/schemas/ActionResult"
 
   # ─── Organization ─────────────────────────────────────────────────────────────
+  /me:
+    get:
+      operationId: getCurrentAccount
+      tags: [settings]
+      summary: Get the authenticated GHIC workspace account
+      responses:
+        "200":
+          description: Current account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardAccount"
+
+  /me/settings:
+    patch:
+      operationId: updateCurrentAccountSettings
+      tags: [settings]
+      summary: Update the authenticated user's persisted preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardAccountSettingsPatch"
+      responses:
+        "200":
+          description: Updated current account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardAccount"
+
   /organization:
     get:
       operationId: getOrganization
@@ -884,6 +931,26 @@ paths:
       responses:
         "200":
           description: Organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+    patch:
+      operationId: updateOrganization
+      tags: [organization]
+      summary: Rename the GHIC workspace (owner only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                workspaceName: { type: string }
+              required: [workspaceName]
+      responses:
+        "200":
+          description: Updated organization
           content:
             application/json:
               schema:
@@ -1016,6 +1083,11 @@ paths:
                 $ref: "#/components/schemas/SystemHealth"
 
 components:
+  securitySchemes:
+    firebaseBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: Firebase ID token
   schemas:
     HealthStatus:
       type: object
@@ -1034,39 +1106,80 @@ components:
     DashboardStats:
       type: object
       properties:
-        repositoriesConnected: { type: number }
-        openIssues: { type: number }
-        issuesToday: { type: number }
-        resolvedToday: { type: number }
-        aiAnalysesToday: { type: number }
+        trackedRepositories: { type: number }
+        indexedRepositories: { type: number }
+        issuesScored: { type: number }
+        bugsDetected: { type: number }
+        analysesCompleted: { type: number }
+        analysesLast24Hours: { type: number }
         highPriorityIssues: { type: number }
-        regressions: { type: number }
-        duplicateCandidates: { type: number }
-        repositoryHealthScore: { type: number }
-        engineeringRiskScore: { type: number }
-        averageAiProcessingTime: { type: number }
-        githubApiUsage: { type: number }
-        llmUsage: { type: number }
-        embeddingUsage: { type: number }
-        queueStatus: { type: string }
-        webhookStatus: { type: string }
+        maintainerReviewIssues: { type: number }
+        activeAlerts: { type: number }
+        retrievalSuccessRate: { type: ["number", "null"] }
+        averageAnalysisLatencyMs: { type: ["number", "null"] }
+        openIssues: { type: number }
+        resolvedIssues: { type: number }
+        commentsPosted: { type: number }
       required:
-        - repositoriesConnected
-        - openIssues
-        - issuesToday
-        - resolvedToday
-        - aiAnalysesToday
+        - trackedRepositories
+        - indexedRepositories
+        - issuesScored
+        - bugsDetected
+        - analysesCompleted
+        - analysesLast24Hours
         - highPriorityIssues
-        - regressions
-        - duplicateCandidates
-        - repositoryHealthScore
-        - engineeringRiskScore
-        - averageAiProcessingTime
-        - githubApiUsage
-        - llmUsage
-        - embeddingUsage
-        - queueStatus
-        - webhookStatus
+        - maintainerReviewIssues
+        - activeAlerts
+        - retrievalSuccessRate
+        - averageAnalysisLatencyMs
+        - openIssues
+        - resolvedIssues
+        - commentsPosted
+
+    DashboardOverview:
+      type: object
+      properties:
+        stats:
+          $ref: "#/components/schemas/DashboardStats"
+        recentActivity:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityItem"
+        alerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Alert"
+        recentAnalyses:
+          type: array
+          items:
+            $ref: "#/components/schemas/Issue"
+        repositoryIndexing:
+          type: array
+          items:
+            $ref: "#/components/schemas/RepositoryIndexStatus"
+        runtime:
+          type: object
+          additionalProperties: true
+      required:
+        [
+          stats,
+          recentActivity,
+          alerts,
+          recentAnalyses,
+          repositoryIndexing,
+          runtime,
+        ]
+
+    RepositoryIndexStatus:
+      type: object
+      properties:
+        id: { type: string }
+        fullName: { type: string }
+        status: { type: string }
+        chunkCount: { type: number }
+        fileCount: { type: number }
+        lastIndexedAt: { type: ["string", "null"] }
+      required: [id, fullName, status, chunkCount, fileCount, lastIndexedAt]
 
     ActivityItem:
       type: object
@@ -1104,14 +1217,15 @@ components:
         visibility: { type: string }
         language: { type: ["string", "null"] }
         framework: { type: ["string", "null"] }
-        defaultBranch: { type: string }
+        defaultBranch: { type: ["string", "null"] }
         sizeKb: { type: number }
         stars: { type: number }
         forks: { type: number }
-        openIssues: { type: number }
+        openIssues: { type: ["number", "null"] }
         contributors: { type: number }
-        healthScore: { type: number }
-        riskScore: { type: number }
+        health: { type: string }
+        healthScore: { type: ["number", "null"] }
+        riskScore: { type: ["number", "null"] }
         lastIndexedAt: { type: ["string", "null"] }
         indexStatus: { type: string }
         repositoryIntelligenceStatus: { type: string }
@@ -1120,8 +1234,24 @@ components:
         installationStatus: { type: string }
         description: { type: ["string", "null"] }
         url: { type: string }
-        createdAt: { type: string }
-        updatedAt: { type: string }
+        createdAt: { type: ["string", "null"] }
+        updatedAt: { type: ["string", "null"] }
+        indexedCommitSha: { type: string }
+        chunkCount: { type: number }
+        fileCount: { type: number }
+        countMismatch: { type: boolean }
+        embeddingProvider: { type: ["string", "null"] }
+        embeddingModel: { type: ["string", "null"] }
+        embeddingDimensions: { type: ["number", "null"] }
+        embeddingSignature: { type: ["string", "null"] }
+        vectorBackend: { type: ["string", "null"] }
+        retrievalCount: { type: number }
+        retrievalHitCount: { type: number }
+        retrievalHitRate: { type: ["number", "null"] }
+        indexDurationSeconds: { type: ["number", "null"] }
+        architectureSummary: { type: string }
+        hasIndexError: { type: boolean }
+        operationalMessage: { type: ["string", "null"] }
       required:
         - id
         - name
@@ -1129,11 +1259,8 @@ components:
         - owner
         - visibility
         - defaultBranch
-        - sizeKb
-        - stars
-        - forks
         - openIssues
-        - contributors
+        - health
         - healthScore
         - riskScore
         - indexStatus
@@ -1144,6 +1271,14 @@ components:
         - url
         - createdAt
         - updatedAt
+        - indexedCommitSha
+        - chunkCount
+        - fileCount
+        - countMismatch
+        - retrievalCount
+        - retrievalHitCount
+        - architectureSummary
+        - hasIndexError
 
     RepositoryListResponse:
       type: object
@@ -1153,9 +1288,12 @@ components:
           items:
             $ref: "#/components/schemas/Repository"
         total: { type: number }
+        indexedTotal: { type: number }
         page: { type: number }
         limit: { type: number }
-      required: [items, total, page, limit]
+        available: { type: boolean }
+        reason: { type: string }
+      required: [items, total, indexedTotal, page, limit]
 
     RepositoryAnalytics:
       type: object
@@ -1242,22 +1380,38 @@ components:
         number: { type: number }
         repositoryId: { type: string }
         repositoryName: { type: string }
-        title: { type: string }
+        title: { type: ["string", "null"] }
         status: { type: string }
-        priority: { type: string }
-        severity: { type: string }
+        priority: { type: ["string", "null"] }
+        severity: { type: ["string", "null"] }
         classification: { type: string }
         actionability: { type: string }
         confidence: { type: number }
+        statisticalScore: { type: number }
+        threshold: { type: ["number", "null"] }
+        llmConfidence: { type: ["number", "null"] }
+        riskLevel: { type: ["string", "null"] }
         labels:
           type: array
           items: { type: string }
         assignee: { type: ["string", "null"] }
-        createdAt: { type: string }
-        updatedAt: { type: string }
+        createdAt: { type: ["string", "null"] }
+        updatedAt: { type: ["string", "null"] }
+        analysisTimestamp: { type: ["string", "null"] }
         aiStatus: { type: string }
         hasEngineeringReport: { type: boolean }
         url: { type: string }
+        summary: { type: ["string", "null"] }
+        finalVerdict: { type: ["string", "null"] }
+        recommendedAction: { type: ["string", "null"] }
+        repositoryEvidenceStatus: { type: string }
+        repositoryEvidenceNote: { type: ["string", "null"] }
+        relevantFiles: { type: array, items: { type: string } }
+        relevantFunctions: { type: array, items: { type: string } }
+        needsMaintainerReview: { type: boolean }
+        reviewReasons: { type: array, items: { type: string } }
+        commentPosted: { type: boolean }
+        analysisLatencyMs: { type: ["number", "null"] }
       required:
         - id
         - number
@@ -1270,12 +1424,19 @@ components:
         - classification
         - actionability
         - confidence
+        - statisticalScore
         - labels
         - createdAt
         - updatedAt
         - aiStatus
         - hasEngineeringReport
         - url
+        - repositoryEvidenceStatus
+        - relevantFiles
+        - relevantFunctions
+        - needsMaintainerReview
+        - reviewReasons
+        - commentPosted
 
     IssueListResponse:
       type: object
@@ -1287,6 +1448,8 @@ components:
         total: { type: number }
         page: { type: number }
         limit: { type: number }
+        available: { type: boolean }
+        reason: { type: string }
       required: [items, total, page, limit]
 
     IssueUpdate:
@@ -1347,6 +1510,15 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AutomationSuggestion"
+        reasoning: { type: array, items: { type: string } }
+        riskReasons: { type: array, items: { type: string } }
+        businessImpact: { type: array, items: { type: string } }
+        repositoryEvidenceStatus: { type: string }
+        repositoryEvidenceNote: { type: ["string", "null"] }
+        evidenceChunks:
+          type: array
+          items: { type: object, additionalProperties: true }
+        reviewReasons: { type: array, items: { type: string } }
       required:
         - issue
         - executiveSummary
@@ -1384,8 +1556,9 @@ components:
       properties:
         id: { type: string }
         number: { type: number }
-        title: { type: string }
+        title: { type: ["string", "null"] }
         status: { type: string }
+        similarity: { type: ["number", "null"] }
       required: [id, number, title, status]
 
     TimelineEvent:
@@ -1633,7 +1806,8 @@ components:
           type: array
           items: { type: string }
         recommendedAction: { type: string }
-        createdAt: { type: string }
+        repositoryName: { type: string }
+        createdAt: { type: ["string", "null"] }
       required:
         - id
         - primaryIssue
@@ -1642,6 +1816,7 @@ components:
         - sharedFiles
         - sharedCommits
         - recommendedAction
+        - repositoryName
         - createdAt
 
     DuplicateCandidate:
@@ -1649,7 +1824,7 @@ components:
       properties:
         issue:
           $ref: "#/components/schemas/IssueRef"
-        similarity: { type: number }
+        similarity: { type: ["number", "null"] }
       required: [issue, similarity]
 
     DuplicateClusterListResponse:
@@ -1845,7 +2020,8 @@ components:
         riskScore: { type: number }
         riskLevel: { type: string }
         topRiskFactor: { type: string }
-      required: [repositoryId, repositoryName, riskScore, riskLevel, topRiskFactor]
+      required:
+        [repositoryId, repositoryName, riskScore, riskLevel, topRiskFactor]
 
     RiskItem:
       type: object
@@ -1862,11 +2038,15 @@ components:
       properties:
         period: { type: string }
         totalIssues: { type: number }
+        analyzedIssues: { type: number }
         resolvedIssues: { type: number }
         openIssues: { type: number }
-        regressions: { type: number }
+        bugsDetected: { type: number }
+        regressions: { type: ["number", "null"] }
         duplicatesFound: { type: number }
-        avgResolutionDays: { type: number }
+        avgResolutionDays: { type: ["number", "null"] }
+        averageAnalysisLatencyMs: { type: ["number", "null"] }
+        retrievalSuccessRate: { type: ["number", "null"] }
         issuesByPriority:
           type: array
           items:
@@ -1890,11 +2070,15 @@ components:
       required:
         - period
         - totalIssues
+        - analyzedIssues
         - resolvedIssues
         - openIssues
+        - bugsDetected
         - regressions
         - duplicatesFound
         - avgResolutionDays
+        - averageAnalysisLatencyMs
+        - retrievalSuccessRate
         - issuesByPriority
         - issuesBySeverity
         - issuesByClassification
@@ -1922,6 +2106,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SearchResultItem"
+        code:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchResultItem"
         commits:
           type: array
           items:
@@ -1943,6 +2131,7 @@ components:
         - total
         - repositories
         - issues
+        - code
         - commits
         - pullRequests
         - components
@@ -1957,7 +2146,8 @@ components:
         description: { type: ["string", "null"] }
         repositoryName: { type: ["string", "null"] }
         url: { type: ["string", "null"] }
-        score: { type: number }
+        score: { type: ["number", "null"] }
+        matchType: { type: string }
         timestamp: { type: ["string", "null"] }
       required: [id, type, title, score]
 
@@ -2033,18 +2223,89 @@ components:
       required: [name, scopes]
 
     # ─── Organization ─────────────────────────────────────────────────────────
+    DashboardAccount:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: ["string", "null"] }
+        email: { type: ["string", "null"] }
+        avatarUrl: { type: ["string", "null"] }
+        role: { type: string, enum: [viewer, member, admin, owner] }
+        settings:
+          $ref: "#/components/schemas/DashboardAccountSettings"
+        createdAt: { type: ["string", "null"] }
+        lastLogin: { type: ["string", "null"] }
+      required: [id, name, email, avatarUrl, role, settings]
+
+    DashboardAccountSettings:
+      type: object
+      properties:
+        displayName: { type: ["string", "null"] }
+        avatarUrl: { type: ["string", "null"] }
+        theme: { type: string, enum: [system, light, dark] }
+        timezone: { type: string }
+        emailPreferences:
+          type: object
+          properties:
+            productUpdates: { type: boolean }
+            weeklyDigest: { type: boolean }
+          required: [productUpdates, weeklyDigest]
+        notificationPreferences:
+          type: object
+          properties:
+            criticalAlerts: { type: boolean }
+            regressions: { type: boolean }
+            duplicates: { type: boolean }
+          required: [criticalAlerts, regressions, duplicates]
+      required:
+        [
+          displayName,
+          avatarUrl,
+          theme,
+          timezone,
+          emailPreferences,
+          notificationPreferences,
+        ]
+
+    DashboardAccountSettingsPatch:
+      type: object
+      properties:
+        displayName: { type: ["string", "null"] }
+        avatarUrl: { type: ["string", "null"] }
+        theme: { type: string, enum: [system, light, dark] }
+        timezone: { type: string }
+        emailPreferences:
+          type: object
+          additionalProperties: { type: boolean }
+        notificationPreferences:
+          type: object
+          additionalProperties: { type: boolean }
+
     Organization:
       type: object
       properties:
         id: { type: string }
         name: { type: string }
+        workspaceName: { type: string }
         slug: { type: string }
         avatarUrl: { type: ["string", "null"] }
         plan: { type: string }
         memberCount: { type: number }
         repositoryCount: { type: number }
-        createdAt: { type: string }
-      required: [id, name, slug, plan, memberCount, repositoryCount, createdAt]
+        createdAt: { type: ["string", "null"] }
+        updatedAt: { type: ["string", "null"] }
+      required:
+        [
+          id,
+          name,
+          workspaceName,
+          slug,
+          plan,
+          memberCount,
+          repositoryCount,
+          createdAt,
+          updatedAt,
+        ]
 
     Member:
       type: object
@@ -2055,7 +2316,7 @@ components:
         email: { type: ["string", "null"] }
         avatarUrl: { type: ["string", "null"] }
         role: { type: string }
-        joinedAt: { type: string }
+        joinedAt: { type: ["string", "null"] }
         lastActiveAt: { type: ["string", "null"] }
       required: [id, login, role, joinedAt]
 
@@ -2155,21 +2416,26 @@ components:
         overall: { type: string }
         webhookStatus: { type: string }
         queueStatus: { type: string }
-        queueLength: { type: number }
+        queueLength: { type: ["number", "null"] }
         databaseStatus: { type: string }
         vectorStoreStatus: { type: string }
         embeddingProviderStatus: { type: string }
         llmProviderStatus: { type: string }
         repositoryIntelligenceStatus: { type: string }
         engineeringIntelligenceStatus: { type: string }
+        automationStatus: { type: string }
+        autoIndex: { type: ["boolean", "null"] }
         githubApiStatus: { type: string }
-        githubApiRateLimit: { type: number }
-        githubApiRateLimitRemaining: { type: number }
-        processingLatencyMs: { type: number }
-        averageResponseTimeMs: { type: number }
-        failedJobsLast24h: { type: number }
-        uptimePercent: { type: number }
+        githubApiRateLimit: { type: ["number", "null"] }
+        githubApiRateLimitRemaining: { type: ["number", "null"] }
+        processingLatencyMs: { type: ["number", "null"] }
+        averageResponseTimeMs: { type: ["number", "null"] }
+        failedJobsLast24h: { type: ["number", "null"] }
+        uptimePercent: { type: ["number", "null"] }
         lastCheckedAt: { type: string }
+        version: { type: ["string", "null"] }
+        model: { type: ["string", "null"] }
+        embeddingSignature: { type: ["string", "null"] }
         services:
           type: array
           items:
@@ -2185,6 +2451,8 @@ components:
         - llmProviderStatus
         - repositoryIntelligenceStatus
         - engineeringIntelligenceStatus
+        - automationStatus
+        - autoIndex
         - githubApiStatus
         - githubApiRateLimit
         - githubApiRateLimitRemaining
@@ -2193,7 +2461,6 @@ components:
         - failedJobsLast24h
         - uptimePercent
         - lastCheckedAt
-        - services
 
     ServiceHealth:
       type: object

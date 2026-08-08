@@ -30,6 +30,9 @@ import type {
   AutomationSuggestionListResponse,
   CommitListResponse,
   ComponentListResponse,
+  DashboardAccount,
+  DashboardAccountSettingsPatch,
+  DashboardOverview,
   DashboardStats,
   DuplicateClusterListResponse,
   GetAnalyticsOverviewParams,
@@ -79,7 +82,8 @@ import type {
   SearchResults,
   Settings,
   SettingsUpdate,
-  SystemHealth
+  SystemHealth,
+  UpdateOrganizationBody
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -174,6 +178,83 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getHealthCheckQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetDashboardOverviewUrl = () => {
+
+
+
+
+  return `/api/dashboard/overview`
+}
+
+/**
+ * @summary Get the authenticated dashboard in one request
+ */
+export const getDashboardOverview = async ( options?: Parameters<typeof customFetch>[1]): Promise<DashboardOverview> => {
+
+  return customFetch<DashboardOverview>(getGetDashboardOverviewUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDashboardOverviewQueryKey = () => {
+    return [
+    `/api/dashboard/overview`
+    ] as const;
+    }
+
+
+export const getGetDashboardOverviewQueryOptions = <TData = Awaited<ReturnType<typeof getDashboardOverview>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboardOverview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDashboardOverviewQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDashboardOverview>>> = ({ signal }) => getDashboardOverview({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDashboardOverview>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDashboardOverviewQueryResult = NonNullable<Awaited<ReturnType<typeof getDashboardOverview>>>
+export type GetDashboardOverviewQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get the authenticated dashboard in one request
+ */
+
+export function useGetDashboardOverview<TData = Awaited<ReturnType<typeof getDashboardOverview>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboardOverview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDashboardOverviewQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -3154,6 +3235,154 @@ export const useDeleteApiKey = <TError = ErrorType<unknown>,
       return useMutation(getDeleteApiKeyMutationOptions(options));
     }
 
+export const getGetCurrentAccountUrl = () => {
+
+
+
+
+  return `/api/me`
+}
+
+/**
+ * @summary Get the authenticated GHIC workspace account
+ */
+export const getCurrentAccount = async ( options?: Parameters<typeof customFetch>[1]): Promise<DashboardAccount> => {
+
+  return customFetch<DashboardAccount>(getGetCurrentAccountUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCurrentAccountQueryKey = () => {
+    return [
+    `/api/me`
+    ] as const;
+    }
+
+
+export const getGetCurrentAccountQueryOptions = <TData = Awaited<ReturnType<typeof getCurrentAccount>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCurrentAccount>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCurrentAccountQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCurrentAccount>>> = ({ signal }) => getCurrentAccount({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCurrentAccount>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCurrentAccountQueryResult = NonNullable<Awaited<ReturnType<typeof getCurrentAccount>>>
+export type GetCurrentAccountQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get the authenticated GHIC workspace account
+ */
+
+export function useGetCurrentAccount<TData = Awaited<ReturnType<typeof getCurrentAccount>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCurrentAccount>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCurrentAccountQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateCurrentAccountSettingsUrl = () => {
+
+
+
+
+  return `/api/me/settings`
+}
+
+/**
+ * @summary Update the authenticated user's persisted preferences
+ */
+export const updateCurrentAccountSettings = async (dashboardAccountSettingsPatch: DashboardAccountSettingsPatch, options?: Parameters<typeof customFetch>[1]): Promise<DashboardAccount> => {
+
+  return customFetch<DashboardAccount>(getUpdateCurrentAccountSettingsUrl(),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(dashboardAccountSettingsPatch)
+  }
+);}
+
+
+
+
+
+export const getUpdateCurrentAccountSettingsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCurrentAccountSettings>>, TError,{data: BodyType<DashboardAccountSettingsPatch>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCurrentAccountSettings>>, TError,{data: BodyType<DashboardAccountSettingsPatch>}, TContext> => {
+
+const mutationKey = ['updateCurrentAccountSettings'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCurrentAccountSettings>>, {data: BodyType<DashboardAccountSettingsPatch>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateCurrentAccountSettings(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCurrentAccountSettingsMutationResult = NonNullable<Awaited<ReturnType<typeof updateCurrentAccountSettings>>>
+    export type UpdateCurrentAccountSettingsMutationBody = BodyType<DashboardAccountSettingsPatch>
+    export type UpdateCurrentAccountSettingsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update the authenticated user's persisted preferences
+ */
+export const useUpdateCurrentAccountSettings = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCurrentAccountSettings>>, TError,{data: BodyType<DashboardAccountSettingsPatch>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateCurrentAccountSettings>>,
+        TError,
+        {data: BodyType<DashboardAccountSettingsPatch>},
+        TContext
+      > => {
+      return useMutation(getUpdateCurrentAccountSettingsMutationOptions(options));
+    }
+
 export const getGetOrganizationUrl = () => {
 
 
@@ -3230,6 +3459,77 @@ export function useGetOrganization<TData = Awaited<ReturnType<typeof getOrganiza
 
 
 
+
+export const getUpdateOrganizationUrl = () => {
+
+
+
+
+  return `/api/organization`
+}
+
+/**
+ * @summary Rename the GHIC workspace (owner only)
+ */
+export const updateOrganization = async (updateOrganizationBody: UpdateOrganizationBody, options?: Parameters<typeof customFetch>[1]): Promise<Organization> => {
+
+  return customFetch<Organization>(getUpdateOrganizationUrl(),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateOrganizationBody)
+  }
+);}
+
+
+
+
+
+export const getUpdateOrganizationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOrganization>>, TError,{data: BodyType<UpdateOrganizationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateOrganization>>, TError,{data: BodyType<UpdateOrganizationBody>}, TContext> => {
+
+const mutationKey = ['updateOrganization'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateOrganization>>, {data: BodyType<UpdateOrganizationBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateOrganization(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateOrganizationMutationResult = NonNullable<Awaited<ReturnType<typeof updateOrganization>>>
+    export type UpdateOrganizationMutationBody = BodyType<UpdateOrganizationBody>
+    export type UpdateOrganizationMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Rename the GHIC workspace (owner only)
+ */
+export const useUpdateOrganization = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOrganization>>, TError,{data: BodyType<UpdateOrganizationBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateOrganization>>,
+        TError,
+        {data: BodyType<UpdateOrganizationBody>},
+        TContext
+      > => {
+      return useMutation(getUpdateOrganizationMutationOptions(options));
+    }
 
 export const getListMembersUrl = (params?: ListMembersParams,) => {
   const normalizedParams = new URLSearchParams();

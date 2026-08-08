@@ -1,89 +1,161 @@
-import React from 'react';
-import { useListRepositories, getListRepositoriesQueryKey } from "@workspace/api-client-react";
-import { PageHeader, PageContent, StatusBadge } from "@/components/ui/swiss";
+import React from "react";
+import {
+  getListRepositoriesQueryKey,
+  useListRepositories,
+} from "@workspace/api-client-react";
+import { Search } from "lucide-react";
 import { Link } from "wouter";
-import { format } from "date-fns";
 
-function score(value: number | null | undefined) {
-  return typeof value === 'number' ? value : '—';
-}
-
-function scoreClass(value: number | null | undefined, highGood = true) {
-  if (typeof value !== 'number') return 'text-muted-foreground';
-  if (highGood) return value >= 80 ? 'text-primary' : value >= 50 ? 'text-amber-500' : 'text-destructive';
-  return value >= 70 ? 'text-destructive' : value >= 30 ? 'text-amber-500' : 'text-primary';
-}
+import { DataError } from "@/components/data-state";
+import { PageContent, PageHeader, StatusBadge } from "@/components/ui/swiss";
+import { useDashboardDate } from "@/lib/account";
 
 export default function Repositories() {
-  const { data, isLoading } = useListRepositories({}, { query: { queryKey: getListRepositoriesQueryKey() } });
+  const [search, setSearch] = React.useState("");
+  const [status, setStatus] = React.useState("");
+  const params = {
+    search: search || undefined,
+    status: status || undefined,
+    limit: 100,
+  };
+  const query = useListRepositories(params, {
+    query: { queryKey: getListRepositoriesQueryKey(params) },
+  });
+  const formatDate = useDashboardDate();
 
   return (
     <div className="flex flex-col min-h-full">
-      <PageHeader 
-        title="Repositories" 
-        description="Manage connected GitHub repositories" 
+      <PageHeader
+        title="Repositories"
+        description="Persisted GHIC repository indexes"
       />
-      
-      <PageContent>
-        <div className="border border-border bg-card">
-          <div className="overflow-x-auto">
+      <PageContent className="flex flex-col gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-3">
+          <label className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search tracked repositories"
+              className="w-full border border-border bg-card py-2 pl-10 pr-3 text-sm focus:outline-none focus:border-primary"
+            />
+          </label>
+          <select
+            value={status}
+            onChange={(event) => setStatus(event.target.value)}
+            className="border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:border-primary"
+          >
+            <option value="">All index states</option>
+            <option value="ready">Ready</option>
+            <option value="failed">Failed</option>
+            <option value="indexing">Indexing</option>
+            <option value="not_indexed">Not indexed</option>
+          </select>
+        </div>
+
+        {query.isError ? (
+          <DataError error={query.error} title="Repositories unavailable" />
+        ) : (
+          <div className="border border-border bg-card overflow-x-auto">
             <table className="w-full text-sm text-left">
               <thead className="bg-muted/50 border-b border-border">
                 <tr>
-                  <th className="px-4 py-3 font-display tracking-widest uppercase text-[10px] text-muted-foreground font-bold">Repository</th>
-                  <th className="px-4 py-3 font-display tracking-widest uppercase text-[10px] text-muted-foreground font-bold">Health</th>
-                  <th className="px-4 py-3 font-display tracking-widest uppercase text-[10px] text-muted-foreground font-bold">Risk</th>
-                  <th className="px-4 py-3 font-display tracking-widest uppercase text-[10px] text-muted-foreground font-bold">Language</th>
-                  <th className="px-4 py-3 font-display tracking-widest uppercase text-[10px] text-muted-foreground font-bold">Open Issues</th>
-                  <th className="px-4 py-3 font-display tracking-widest uppercase text-[10px] text-muted-foreground font-bold">Index Status</th>
-                  <th className="px-4 py-3 font-display tracking-widest uppercase text-[10px] text-muted-foreground font-bold">Last Updated</th>
+                  {[
+                    "Repository",
+                    "Health",
+                    "Visibility",
+                    "Language",
+                    "Indexed Data",
+                    "Index Status",
+                    "Last Indexed",
+                  ].map((label) => (
+                    <th
+                      key={label}
+                      className="px-4 py-3 font-display tracking-widest uppercase text-[10px] text-muted-foreground font-bold"
+                    >
+                      {label}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {isLoading ? (
+                {query.isLoading ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground animate-pulse">Loading repositories...</td>
+                    <td
+                      colSpan={7}
+                      className="px-4 py-8 text-center text-muted-foreground animate-pulse"
+                    >
+                      Loading repositories...
+                    </td>
                   </tr>
-                ) : data?.items?.length ? (
-                  data.items.map((repo) => (
-                    <tr key={repo.id} className="hover:bg-muted/30 transition-colors group">
+                ) : query.data?.items.length ? (
+                  query.data.items.map((repository) => (
+                    <tr
+                      key={repository.id}
+                      className="hover:bg-muted/30 transition-colors group"
+                    >
                       <td className="px-4 py-3">
-                        <Link href={`/repositories/${repo.id}`} className="font-bold text-foreground group-hover:text-primary transition-colors">
-                          {repo.fullName}
+                        <Link
+                          href={`/repositories/${repository.id}`}
+                          className="font-bold group-hover:text-primary transition-colors"
+                        >
+                          {repository.fullName}
                         </Link>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`font-mono ${scoreClass(repo.healthScore)}`}>
-                          {score(repo.healthScore)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`font-mono ${scoreClass(repo.riskScore, false)}`}>
-                          {score(repo.riskScore)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">{repo.language || '-'}</td>
-                      <td className="px-4 py-3 font-mono">{repo.openIssues}</td>
-                      <td className="px-4 py-3">
-                        <StatusBadge 
-                          status={repo.indexStatus === 'ready' || repo.indexStatus === 'updating' ? 'success' : repo.indexStatus === 'failed' ? 'danger' : 'neutral'} 
-                          text={repo.indexStatus} 
+                        <StatusBadge
+                          status={
+                            repository.health === "healthy"
+                              ? "success"
+                              : repository.health === "failed" ||
+                                  repository.health === "degraded"
+                                ? "danger"
+                                : "neutral"
+                          }
+                          text={repository.health}
                         />
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground font-mono text-xs">
-                        {format(new Date(repo.updatedAt), 'MMM d, yyyy')}
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {repository.visibility.replace("_", " ")}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {repository.language || "Not recorded"}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs">
+                        {repository.fileCount} files / {repository.chunkCount}{" "}
+                        chunks
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge
+                          status={
+                            repository.indexStatus === "ready"
+                              ? "success"
+                              : repository.indexStatus === "failed"
+                                ? "danger"
+                                : "neutral"
+                          }
+                          text={repository.indexStatus}
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground font-mono text-xs whitespace-nowrap">
+                        {formatDate(repository.lastIndexedAt)}
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No repositories found. Connect GitHub to get started.</td>
+                    <td
+                      colSpan={7}
+                      className="px-4 py-8 text-center text-muted-foreground"
+                    >
+                      No repositories match the current filters.
+                    </td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
-        </div>
+        )}
       </PageContent>
     </div>
   );

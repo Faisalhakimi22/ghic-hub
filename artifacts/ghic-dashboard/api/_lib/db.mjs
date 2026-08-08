@@ -13,13 +13,13 @@
  * writing to it, this should become real migrations before it becomes a
  * source of drift.
  */
-import { neon } from '@neondatabase/serverless';
+import { neon } from "@neondatabase/serverless";
 
 const DATABASE_URL =
   process.env.DATABASE_URL ||
   process.env.GHIC_DATABASE_URL ||
   process.env.POSTGRES_URL ||
-  '';
+  "";
 
 export const dbConfigured = Boolean(DATABASE_URL);
 
@@ -29,7 +29,7 @@ let _ready = null;
 function sql() {
   if (!dbConfigured) {
     const e = new Error(
-      'No database configured. Set DATABASE_URL to enable user accounts and settings.',
+      "No database configured. Set DATABASE_URL to enable user accounts and settings.",
     );
     e.status = 503;
     throw e;
@@ -79,48 +79,72 @@ function ready() {
 export const DEFAULT_USER_SETTINGS = {
   displayName: null,
   avatarUrl: null,
-  theme: 'system',
-  timezone: 'UTC',
+  theme: "system",
+  timezone: "UTC",
   emailPreferences: { productUpdates: false, weeklyDigest: false },
-  notificationPreferences: { criticalAlerts: true, regressions: true, duplicates: false },
+  notificationPreferences: {
+    criticalAlerts: true,
+    regressions: true,
+    duplicates: false,
+  },
 };
 
 /** Defaults for the workspace. */
 export const DEFAULT_ORG_SETTINGS = {
   repositoryPreferences: { autoIndex: false, defaultThreshold: 0.5 },
   aiPreferences: { analysisEnabled: true, repositoryEvidence: false },
-  defaultCommentBehaviour: 'comment_only',
+  defaultCommentBehaviour: "comment_only",
 };
 
 /**
- * Create or refresh the user record for a verified token.
+ * Authenticate a verified identity against workspace membership.
  *
- * The first account to sign in becomes owner; everyone after is a member.
- * Some deterministic bootstrap is necessary — an installation whose first
- * user is a viewer can never grant anyone anything and is permanently
- * stuck. Documented here because it is a real security property: whoever
- * signs in first controls the workspace.
+ * The first account bootstraps an empty workspace as owner. After that,
+ * Firebase proves identity only: access requires an existing ghic_users row.
+ * This prevents an unrelated Firebase user from joining the shared workspace.
  */
-export async function upsertUser(claims) {
+export async function authenticateUser(claims) {
   await ready();
   const q = sql();
 
-  const [{ count }] = await q`SELECT count(*)::int AS count FROM ghic_users`;
-  const bootstrapRole = count === 0 ? 'owner' : 'member';
-
+  // Existing membership is authoritative. A valid Firebase token proves
+  // identity; it does not grant access to this workspace.
   const rows = await q`
-    INSERT INTO ghic_users (firebase_uid, github_id, name, email, avatar_url, role)
-    VALUES (${claims.uid}, ${claims.githubId}, ${claims.name}, ${claims.email},
-            ${claims.avatarUrl}, ${bootstrapRole})
-    ON CONFLICT (firebase_uid) DO UPDATE SET
-      github_id  = COALESCE(EXCLUDED.github_id, ghic_users.github_id),
-      name       = COALESCE(EXCLUDED.name, ghic_users.name),
-      email      = COALESCE(EXCLUDED.email, ghic_users.email),
-      avatar_url = COALESCE(EXCLUDED.avatar_url, ghic_users.avatar_url),
+    UPDATE ghic_users SET
+      github_id  = COALESCE(${claims.githubId}, github_id),
+      name       = COALESCE(${claims.name}, name),
+      email      = COALESCE(${claims.email}, email),
+      avatar_url = COALESCE(${claims.avatarUrl}, avatar_url),
       last_login = now()
+    WHERE firebase_uid = ${claims.uid}
     RETURNING firebase_uid, github_id, name, email, avatar_url, role, settings,
               created_at, last_login`;
-  return shapeUser(rows[0]);
+  if (rows.length) return shapeUser(rows[0]);
+
+  // Bootstrap only an empty installation. Once any member exists, unknown
+  // identities fail closed instead of being silently admitted as members.
+  const bootstrap = await q`
+    INSERT INTO ghic_users (firebase_uid, github_id, name, email, avatar_url, role)
+    SELECT ${claims.uid}, ${claims.githubId}, ${claims.name}, ${claims.email},
+           ${claims.avatarUrl}, 'owner'
+    WHERE NOT EXISTS (SELECT 1 FROM ghic_users)
+    ON CONFLICT (firebase_uid) DO NOTHING
+    RETURNING firebase_uid, github_id, name, email, avatar_url, role, settings,
+              created_at, last_login`;
+  if (bootstrap.length) return shapeUser(bootstrap[0]);
+
+  const error = new Error(
+    "This account is not a member of the GHIC workspace.",
+  );
+  error.status = 403;
+  error.code = "workspace_access_denied";
+  throw error;
+}
+
+/** A ready Neon query function for server-only product data access. */
+export async function database() {
+  await ready();
+  return sql();
 }
 
 export async function getUser(uid) {
@@ -153,7 +177,7 @@ export async function updateUserSettings(uid, patch) {
     RETURNING firebase_uid, github_id, name, email, avatar_url, role, settings,
               created_at, last_login`;
   if (!rows.length) {
-    const e = new Error('User not found.');
+    const e = new Error("User not found.");
     e.status = 404;
     throw e;
   }
@@ -175,12 +199,14 @@ export async function updateUserRole(targetUid, role) {
     SELECT count(*)::int AS count FROM ghic_users WHERE role = 'owner'`;
   const existing = await getUser(targetUid);
   if (!existing) {
-    const e = new Error('User not found.');
+    const e = new Error("User not found.");
     e.status = 404;
     throw e;
   }
-  if (existing.role === 'owner' && role !== 'owner' && count <= 1) {
-    const e = new Error('Cannot demote the only owner; promote another owner first.');
+  if (existing.role === "owner" && role !== "owner" && count <= 1) {
+    const e = new Error(
+      "Cannot demote the only owner; promote another owner first.",
+    );
     e.status = 409;
     throw e;
   }
@@ -201,7 +227,7 @@ export async function getOrgSettings() {
     FROM ghic_org_settings WHERE id = 1`;
   const row = rows[0] || {};
   return {
-    workspaceName: row.workspace_name || 'GHIC Workspace',
+    workspaceName: row.workspace_name || "GHIC Workspace",
     ...DEFAULT_ORG_SETTINGS,
     ...(row.settings || {}),
     updatedAt: row.updated_at || null,
@@ -225,6 +251,7 @@ export async function updateOrgSettings(patch, actorUid) {
 }
 
 function shapeUser(row) {
+  const storedSettings = row.settings || {};
   return {
     id: row.firebase_uid,
     firebaseUid: row.firebase_uid,
@@ -233,7 +260,18 @@ function shapeUser(row) {
     email: row.email,
     avatarUrl: row.avatar_url,
     role: row.role,
-    settings: { ...DEFAULT_USER_SETTINGS, ...(row.settings || {}) },
+    settings: {
+      ...DEFAULT_USER_SETTINGS,
+      ...storedSettings,
+      emailPreferences: {
+        ...DEFAULT_USER_SETTINGS.emailPreferences,
+        ...(storedSettings.emailPreferences || {}),
+      },
+      notificationPreferences: {
+        ...DEFAULT_USER_SETTINGS.notificationPreferences,
+        ...(storedSettings.notificationPreferences || {}),
+      },
+    },
     createdAt: row.created_at,
     lastLogin: row.last_login,
   };

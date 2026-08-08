@@ -1,33 +1,35 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Route, Switch, Router as WouterRouter } from 'wouter';
-import { ThemeProvider } from '@/components/theme-provider';
-import { Shell } from '@/components/layout/Shell';
-import { AuthProvider, useAuth } from '@/lib/auth';
-import Login from '@/pages/login';
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Route, Switch, Router as WouterRouter } from "wouter";
+import { ThemeProvider } from "@/components/theme-provider";
+import { Shell } from "@/components/layout/Shell";
+import { AuthProvider, useAuth } from "@/lib/auth";
+import Login from "@/pages/login";
+import { DataError } from "@/components/data-state";
+import { useCurrentAccount } from "@/lib/account";
 
 // Pages
-import Dashboard from '@/pages/dashboard';
-import Repositories from '@/pages/repositories';
-import RepositoryDetail from '@/pages/repository-detail';
-import Issues from '@/pages/issues';
-import IssueDetail from '@/pages/issue-detail';
-import Intelligence from '@/pages/intelligence';
-import Analytics from '@/pages/analytics';
-import Commits from '@/pages/commits';
-import PullRequests from '@/pages/pull-requests';
-import Releases from '@/pages/releases';
-import Components from '@/pages/components';
-import Duplicates from '@/pages/duplicates';
-import Regressions from '@/pages/regressions';
-import Automation from '@/pages/automation';
-import Search from '@/pages/search';
-import Notifications from '@/pages/notifications';
-import Integrations from '@/pages/integrations';
-import Organization from '@/pages/organization';
-import Settings from '@/pages/settings';
-import AuditLogs from '@/pages/audit-logs';
-import SystemHealth from '@/pages/system-health';
-import NotFound from '@/pages/not-found';
+import Dashboard from "@/pages/dashboard";
+import Repositories from "@/pages/repositories";
+import RepositoryDetail from "@/pages/repository-detail";
+import Issues from "@/pages/issues";
+import IssueDetail from "@/pages/issue-detail";
+import Intelligence from "@/pages/intelligence";
+import Analytics from "@/pages/analytics";
+import Commits from "@/pages/commits";
+import PullRequests from "@/pages/pull-requests";
+import Releases from "@/pages/releases";
+import Components from "@/pages/components";
+import Duplicates from "@/pages/duplicates";
+import Regressions from "@/pages/regressions";
+import Automation from "@/pages/automation";
+import Search from "@/pages/search";
+import Notifications from "@/pages/notifications";
+import Integrations from "@/pages/integrations";
+import Organization from "@/pages/organization";
+import Settings from "@/pages/settings";
+import AuditLogs from "@/pages/audit-logs";
+import SystemHealth from "@/pages/system-health";
+import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,13 +45,13 @@ function Router() {
     <Shell>
       <Switch>
         <Route path="/" component={Dashboard} />
-        
+
         <Route path="/repositories" component={Repositories} />
         <Route path="/repositories/:id" component={RepositoryDetail} />
-        
+
         <Route path="/issues" component={Issues} />
         <Route path="/issues/:id" component={IssueDetail} />
-        
+
         <Route path="/intelligence" component={Intelligence} />
         <Route path="/analytics" component={Analytics} />
         <Route path="/commits" component={Commits} />
@@ -66,7 +68,7 @@ function Router() {
         <Route path="/settings" component={Settings} />
         <Route path="/audit-logs" component={AuditLogs} />
         <Route path="/system-health" component={SystemHealth} />
-        
+
         <Route component={NotFound} />
       </Switch>
     </Shell>
@@ -86,20 +88,43 @@ function Router() {
  * would expose no data, because every endpoint verifies its own token.
  */
 function ProtectedApp() {
-  const { user, loading } = useAuth();
+  const { user, loading, signOut } = useAuth();
+  const account = useCurrentAccount();
 
-  if (loading) {
+  if (loading || (user && account.isLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="h-8 w-8 animate-pulse bg-muted" aria-label="Loading session" />
+        <div
+          className="h-8 w-8 animate-pulse bg-muted"
+          aria-label="Loading session"
+        />
       </div>
     );
   }
 
   if (!user) return <Login />;
 
+  if (account.isError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-6">
+        <div className="w-full max-w-xl flex flex-col gap-3">
+          <DataError
+            error={account.error}
+            title="Workspace access unavailable"
+          />
+          <button
+            onClick={() => void signOut()}
+            className="self-end px-4 py-2 border border-border bg-card text-xs font-display tracking-widest uppercase font-bold hover:bg-muted"
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+    <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
       <Router />
     </WouterRouter>
   );

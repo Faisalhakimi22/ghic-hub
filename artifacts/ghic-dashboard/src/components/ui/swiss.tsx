@@ -57,8 +57,8 @@ export function MetricCard({
           <span className="text-[10px] font-display tracking-widest uppercase truncate">{title}</span>
           {Icon && <Icon className="w-3 h-3 shrink-0" />}
         </div>
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-xl font-display font-bold tracking-tight text-foreground leading-none">{value}</span>
+        <div className="flex items-baseline gap-1.5 min-w-0">
+          <span className="text-xl font-display font-bold tracking-tight text-foreground leading-tight min-w-0 break-words [overflow-wrap:anywhere]">{value}</span>
           {trend !== undefined && (
             <span className={cn("text-[10px] font-bold", trend > 0 ? "text-destructive" : "text-primary")}>
               {trend > 0 ? '+' : ''}{trend}%
@@ -75,8 +75,8 @@ export function MetricCard({
         <span className="text-xs font-display tracking-widest uppercase">{title}</span>
         {Icon && <Icon className="w-4 h-4" />}
       </div>
-      <div className="flex items-end gap-3">
-        <span className="text-4xl font-display font-bold tracking-tight text-foreground leading-none">{value}</span>
+      <div className="flex items-end gap-3 min-w-0">
+        <span className="text-4xl font-display font-bold tracking-tight text-foreground leading-none min-w-0 break-words [overflow-wrap:anywhere]">{value}</span>
         {trend !== undefined && (
           <div className="flex flex-col mb-0.5">
             <span className={cn("text-xs font-bold", trend > 0 ? "text-destructive" : "text-primary")}>
@@ -105,15 +105,7 @@ export function StatusBadge({ status, text }: { status: 'success' | 'warning' | 
   );
 }
 
-/**
- * Shown on pages whose data GHIC does not have.
- *
- * The alternative was leaving these pages on mock data so they looked
- * complete. A dashboard that renders invented numbers is worse than one
- * that admits a gap: the numbers get believed, acted on, and quoted. This
- * says plainly what is missing and why, which is also the honest input to
- * deciding whether the feature is worth building.
- */
+/** Shown on pages that do not have a durable GHIC data source yet. */
 export function FeatureUnavailable({ reason }: { reason?: string }) {
   return (
     <div className="border border-dashed border-border bg-muted/30 p-6 flex flex-col gap-2">

@@ -16,25 +16,110 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
+ * @summary Get the authenticated dashboard in one request
+ */
+export const GetDashboardOverviewResponse = zod.object({
+  "stats": zod.object({
+  "trackedRepositories": zod.number(),
+  "indexedRepositories": zod.number(),
+  "issuesScored": zod.number(),
+  "bugsDetected": zod.number(),
+  "analysesCompleted": zod.number(),
+  "analysesLast24Hours": zod.number(),
+  "highPriorityIssues": zod.number(),
+  "maintainerReviewIssues": zod.number(),
+  "activeAlerts": zod.number(),
+  "retrievalSuccessRate": zod.number().nullable(),
+  "averageAnalysisLatencyMs": zod.number().nullable(),
+  "openIssues": zod.number(),
+  "resolvedIssues": zod.number(),
+  "commentsPosted": zod.number()
+}),
+  "recentActivity": zod.array(zod.object({
+  "id": zod.string(),
+  "type": zod.string(),
+  "message": zod.string(),
+  "repositoryName": zod.string().nullish(),
+  "actor": zod.string(),
+  "timestamp": zod.string(),
+  "link": zod.string().nullish()
+})),
+  "alerts": zod.array(zod.object({
+  "id": zod.string(),
+  "type": zod.string(),
+  "severity": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "repositoryName": zod.string().nullish(),
+  "timestamp": zod.string(),
+  "resolved": zod.boolean()
+})),
+  "recentAnalyses": zod.array(zod.object({
+  "id": zod.string(),
+  "number": zod.number(),
+  "repositoryId": zod.string(),
+  "repositoryName": zod.string(),
+  "title": zod.string().nullable(),
+  "status": zod.string(),
+  "priority": zod.string().nullable(),
+  "severity": zod.string().nullable(),
+  "classification": zod.string(),
+  "actionability": zod.string(),
+  "confidence": zod.number(),
+  "statisticalScore": zod.number(),
+  "threshold": zod.number().nullish(),
+  "llmConfidence": zod.number().nullish(),
+  "riskLevel": zod.string().nullish(),
+  "labels": zod.array(zod.string()),
+  "assignee": zod.string().nullish(),
+  "createdAt": zod.string().nullable(),
+  "updatedAt": zod.string().nullable(),
+  "analysisTimestamp": zod.string().nullish(),
+  "aiStatus": zod.string(),
+  "hasEngineeringReport": zod.boolean(),
+  "url": zod.string(),
+  "summary": zod.string().nullish(),
+  "finalVerdict": zod.string().nullish(),
+  "recommendedAction": zod.string().nullish(),
+  "repositoryEvidenceStatus": zod.string(),
+  "repositoryEvidenceNote": zod.string().nullish(),
+  "relevantFiles": zod.array(zod.string()),
+  "relevantFunctions": zod.array(zod.string()),
+  "needsMaintainerReview": zod.boolean(),
+  "reviewReasons": zod.array(zod.string()),
+  "commentPosted": zod.boolean(),
+  "analysisLatencyMs": zod.number().nullish()
+})),
+  "repositoryIndexing": zod.array(zod.object({
+  "id": zod.string(),
+  "fullName": zod.string(),
+  "status": zod.string(),
+  "chunkCount": zod.number(),
+  "fileCount": zod.number(),
+  "lastIndexedAt": zod.string().nullable()
+})),
+  "runtime": zod.record(zod.string(), zod.unknown())
+})
+
+
+/**
  * @summary Get dashboard overview statistics
  */
 export const GetDashboardStatsResponse = zod.object({
-  "repositoriesConnected": zod.number(),
-  "openIssues": zod.number(),
-  "issuesToday": zod.number(),
-  "resolvedToday": zod.number(),
-  "aiAnalysesToday": zod.number(),
+  "trackedRepositories": zod.number(),
+  "indexedRepositories": zod.number(),
+  "issuesScored": zod.number(),
+  "bugsDetected": zod.number(),
+  "analysesCompleted": zod.number(),
+  "analysesLast24Hours": zod.number(),
   "highPriorityIssues": zod.number(),
-  "regressions": zod.number(),
-  "duplicateCandidates": zod.number(),
-  "repositoryHealthScore": zod.number(),
-  "engineeringRiskScore": zod.number(),
-  "averageAiProcessingTime": zod.number(),
-  "githubApiUsage": zod.number(),
-  "llmUsage": zod.number(),
-  "embeddingUsage": zod.number(),
-  "queueStatus": zod.string(),
-  "webhookStatus": zod.string()
+  "maintainerReviewIssues": zod.number(),
+  "activeAlerts": zod.number(),
+  "retrievalSuccessRate": zod.number().nullable(),
+  "averageAnalysisLatencyMs": zod.number().nullable(),
+  "openIssues": zod.number(),
+  "resolvedIssues": zod.number(),
+  "commentsPosted": zod.number()
 })
 
 
@@ -89,14 +174,15 @@ export const ListRepositoriesResponse = zod.object({
   "visibility": zod.string(),
   "language": zod.string().nullish(),
   "framework": zod.string().nullish(),
-  "defaultBranch": zod.string(),
-  "sizeKb": zod.number(),
-  "stars": zod.number(),
-  "forks": zod.number(),
-  "openIssues": zod.number(),
-  "contributors": zod.number(),
-  "healthScore": zod.number(),
-  "riskScore": zod.number(),
+  "defaultBranch": zod.string().nullable(),
+  "sizeKb": zod.number().optional(),
+  "stars": zod.number().optional(),
+  "forks": zod.number().optional(),
+  "openIssues": zod.number().nullable(),
+  "contributors": zod.number().optional(),
+  "health": zod.string(),
+  "healthScore": zod.number().nullable(),
+  "riskScore": zod.number().nullable(),
   "lastIndexedAt": zod.string().nullish(),
   "indexStatus": zod.string(),
   "repositoryIntelligenceStatus": zod.string(),
@@ -105,12 +191,31 @@ export const ListRepositoriesResponse = zod.object({
   "installationStatus": zod.string(),
   "description": zod.string().nullish(),
   "url": zod.string(),
-  "createdAt": zod.string(),
-  "updatedAt": zod.string()
+  "createdAt": zod.string().nullable(),
+  "updatedAt": zod.string().nullable(),
+  "indexedCommitSha": zod.string(),
+  "chunkCount": zod.number(),
+  "fileCount": zod.number(),
+  "countMismatch": zod.boolean(),
+  "embeddingProvider": zod.string().nullish(),
+  "embeddingModel": zod.string().nullish(),
+  "embeddingDimensions": zod.number().nullish(),
+  "embeddingSignature": zod.string().nullish(),
+  "vectorBackend": zod.string().nullish(),
+  "retrievalCount": zod.number(),
+  "retrievalHitCount": zod.number(),
+  "retrievalHitRate": zod.number().nullish(),
+  "indexDurationSeconds": zod.number().nullish(),
+  "architectureSummary": zod.string(),
+  "hasIndexError": zod.boolean(),
+  "operationalMessage": zod.string().nullish()
 })),
   "total": zod.number(),
+  "indexedTotal": zod.number(),
   "page": zod.number(),
-  "limit": zod.number()
+  "limit": zod.number(),
+  "available": zod.boolean().optional(),
+  "reason": zod.string().optional()
 })
 
 
@@ -129,14 +234,15 @@ export const GetRepositoryResponse = zod.object({
   "visibility": zod.string(),
   "language": zod.string().nullish(),
   "framework": zod.string().nullish(),
-  "defaultBranch": zod.string(),
-  "sizeKb": zod.number(),
-  "stars": zod.number(),
-  "forks": zod.number(),
-  "openIssues": zod.number(),
-  "contributors": zod.number(),
-  "healthScore": zod.number(),
-  "riskScore": zod.number(),
+  "defaultBranch": zod.string().nullable(),
+  "sizeKb": zod.number().optional(),
+  "stars": zod.number().optional(),
+  "forks": zod.number().optional(),
+  "openIssues": zod.number().nullable(),
+  "contributors": zod.number().optional(),
+  "health": zod.string(),
+  "healthScore": zod.number().nullable(),
+  "riskScore": zod.number().nullable(),
   "lastIndexedAt": zod.string().nullish(),
   "indexStatus": zod.string(),
   "repositoryIntelligenceStatus": zod.string(),
@@ -145,8 +251,24 @@ export const GetRepositoryResponse = zod.object({
   "installationStatus": zod.string(),
   "description": zod.string().nullish(),
   "url": zod.string(),
-  "createdAt": zod.string(),
-  "updatedAt": zod.string()
+  "createdAt": zod.string().nullable(),
+  "updatedAt": zod.string().nullable(),
+  "indexedCommitSha": zod.string(),
+  "chunkCount": zod.number(),
+  "fileCount": zod.number(),
+  "countMismatch": zod.boolean(),
+  "embeddingProvider": zod.string().nullish(),
+  "embeddingModel": zod.string().nullish(),
+  "embeddingDimensions": zod.number().nullish(),
+  "embeddingSignature": zod.string().nullish(),
+  "vectorBackend": zod.string().nullish(),
+  "retrievalCount": zod.number(),
+  "retrievalHitCount": zod.number(),
+  "retrievalHitRate": zod.number().nullish(),
+  "indexDurationSeconds": zod.number().nullish(),
+  "architectureSummary": zod.string(),
+  "hasIndexError": zod.boolean(),
+  "operationalMessage": zod.string().nullish()
 })
 
 
@@ -396,24 +518,42 @@ export const ListIssuesResponse = zod.object({
   "number": zod.number(),
   "repositoryId": zod.string(),
   "repositoryName": zod.string(),
-  "title": zod.string(),
+  "title": zod.string().nullable(),
   "status": zod.string(),
-  "priority": zod.string(),
-  "severity": zod.string(),
+  "priority": zod.string().nullable(),
+  "severity": zod.string().nullable(),
   "classification": zod.string(),
   "actionability": zod.string(),
   "confidence": zod.number(),
+  "statisticalScore": zod.number(),
+  "threshold": zod.number().nullish(),
+  "llmConfidence": zod.number().nullish(),
+  "riskLevel": zod.string().nullish(),
   "labels": zod.array(zod.string()),
   "assignee": zod.string().nullish(),
-  "createdAt": zod.string(),
-  "updatedAt": zod.string(),
+  "createdAt": zod.string().nullable(),
+  "updatedAt": zod.string().nullable(),
+  "analysisTimestamp": zod.string().nullish(),
   "aiStatus": zod.string(),
   "hasEngineeringReport": zod.boolean(),
-  "url": zod.string()
+  "url": zod.string(),
+  "summary": zod.string().nullish(),
+  "finalVerdict": zod.string().nullish(),
+  "recommendedAction": zod.string().nullish(),
+  "repositoryEvidenceStatus": zod.string(),
+  "repositoryEvidenceNote": zod.string().nullish(),
+  "relevantFiles": zod.array(zod.string()),
+  "relevantFunctions": zod.array(zod.string()),
+  "needsMaintainerReview": zod.boolean(),
+  "reviewReasons": zod.array(zod.string()),
+  "commentPosted": zod.boolean(),
+  "analysisLatencyMs": zod.number().nullish()
 })),
   "total": zod.number(),
   "page": zod.number(),
-  "limit": zod.number()
+  "limit": zod.number(),
+  "available": zod.boolean().optional(),
+  "reason": zod.string().optional()
 })
 
 
@@ -430,20 +570,36 @@ export const GetIssueResponse = zod.object({
   "number": zod.number(),
   "repositoryId": zod.string(),
   "repositoryName": zod.string(),
-  "title": zod.string(),
+  "title": zod.string().nullable(),
   "status": zod.string(),
-  "priority": zod.string(),
-  "severity": zod.string(),
+  "priority": zod.string().nullable(),
+  "severity": zod.string().nullable(),
   "classification": zod.string(),
   "actionability": zod.string(),
   "confidence": zod.number(),
+  "statisticalScore": zod.number(),
+  "threshold": zod.number().nullish(),
+  "llmConfidence": zod.number().nullish(),
+  "riskLevel": zod.string().nullish(),
   "labels": zod.array(zod.string()),
   "assignee": zod.string().nullish(),
-  "createdAt": zod.string(),
-  "updatedAt": zod.string(),
+  "createdAt": zod.string().nullable(),
+  "updatedAt": zod.string().nullable(),
+  "analysisTimestamp": zod.string().nullish(),
   "aiStatus": zod.string(),
   "hasEngineeringReport": zod.boolean(),
-  "url": zod.string()
+  "url": zod.string(),
+  "summary": zod.string().nullish(),
+  "finalVerdict": zod.string().nullish(),
+  "recommendedAction": zod.string().nullish(),
+  "repositoryEvidenceStatus": zod.string(),
+  "repositoryEvidenceNote": zod.string().nullish(),
+  "relevantFiles": zod.array(zod.string()),
+  "relevantFunctions": zod.array(zod.string()),
+  "needsMaintainerReview": zod.boolean(),
+  "reviewReasons": zod.array(zod.string()),
+  "commentPosted": zod.boolean(),
+  "analysisLatencyMs": zod.number().nullish()
 }),
   "executiveSummary": zod.string(),
   "rootCauseAnalysis": zod.string().nullish(),
@@ -472,8 +628,9 @@ export const GetIssueResponse = zod.object({
   "relatedIssues": zod.array(zod.object({
   "id": zod.string(),
   "number": zod.number(),
-  "title": zod.string(),
-  "status": zod.string()
+  "title": zod.string().nullable(),
+  "status": zod.string(),
+  "similarity": zod.number().nullish()
 })),
   "timeline": zod.array(zod.object({
   "id": zod.string(),
@@ -495,7 +652,14 @@ export const GetIssueResponse = zod.object({
   "createdAt": zod.string(),
   "reviewedAt": zod.string().nullish(),
   "reviewedBy": zod.string().nullish()
-}))
+})),
+  "reasoning": zod.array(zod.string()).optional(),
+  "riskReasons": zod.array(zod.string()).optional(),
+  "businessImpact": zod.array(zod.string()).optional(),
+  "repositoryEvidenceStatus": zod.string().optional(),
+  "repositoryEvidenceNote": zod.string().nullish(),
+  "evidenceChunks": zod.array(zod.record(zod.string(), zod.unknown())).optional(),
+  "reviewReasons": zod.array(zod.string()).optional()
 })
 
 
@@ -519,20 +683,36 @@ export const BulkUpdateIssuesResponse = zod.object({
   "number": zod.number(),
   "repositoryId": zod.string(),
   "repositoryName": zod.string(),
-  "title": zod.string(),
+  "title": zod.string().nullable(),
   "status": zod.string(),
-  "priority": zod.string(),
-  "severity": zod.string(),
+  "priority": zod.string().nullable(),
+  "severity": zod.string().nullable(),
   "classification": zod.string(),
   "actionability": zod.string(),
   "confidence": zod.number(),
+  "statisticalScore": zod.number(),
+  "threshold": zod.number().nullish(),
+  "llmConfidence": zod.number().nullish(),
+  "riskLevel": zod.string().nullish(),
   "labels": zod.array(zod.string()),
   "assignee": zod.string().nullish(),
-  "createdAt": zod.string(),
-  "updatedAt": zod.string(),
+  "createdAt": zod.string().nullable(),
+  "updatedAt": zod.string().nullable(),
+  "analysisTimestamp": zod.string().nullish(),
   "aiStatus": zod.string(),
   "hasEngineeringReport": zod.boolean(),
-  "url": zod.string()
+  "url": zod.string(),
+  "summary": zod.string().nullish(),
+  "finalVerdict": zod.string().nullish(),
+  "recommendedAction": zod.string().nullish(),
+  "repositoryEvidenceStatus": zod.string(),
+  "repositoryEvidenceNote": zod.string().nullish(),
+  "relevantFiles": zod.array(zod.string()),
+  "relevantFunctions": zod.array(zod.string()),
+  "needsMaintainerReview": zod.boolean(),
+  "reviewReasons": zod.array(zod.string()),
+  "commentPosted": zod.boolean(),
+  "analysisLatencyMs": zod.number().nullish()
 })
 
 
@@ -694,23 +874,26 @@ export const ListDuplicateClustersResponse = zod.object({
   "primaryIssue": zod.object({
   "id": zod.string(),
   "number": zod.number(),
-  "title": zod.string(),
-  "status": zod.string()
+  "title": zod.string().nullable(),
+  "status": zod.string(),
+  "similarity": zod.number().nullish()
 }),
   "possibleDuplicates": zod.array(zod.object({
   "issue": zod.object({
   "id": zod.string(),
   "number": zod.number(),
-  "title": zod.string(),
-  "status": zod.string()
+  "title": zod.string().nullable(),
+  "status": zod.string(),
+  "similarity": zod.number().nullish()
 }),
-  "similarity": zod.number()
+  "similarity": zod.number().nullable()
 })),
   "sharedComponents": zod.array(zod.string()),
   "sharedFiles": zod.array(zod.string()),
   "sharedCommits": zod.array(zod.string()),
   "recommendedAction": zod.string(),
-  "createdAt": zod.string()
+  "repositoryName": zod.string(),
+  "createdAt": zod.string().nullable()
 })),
   "total": zod.number(),
   "page": zod.number(),
@@ -734,8 +917,9 @@ export const ListRegressionsResponse = zod.object({
   "issue": zod.object({
   "id": zod.string(),
   "number": zod.number(),
-  "title": zod.string(),
-  "status": zod.string()
+  "title": zod.string().nullable(),
+  "status": zod.string(),
+  "similarity": zod.number().nullish()
 }),
   "confidence": zod.number(),
   "relatedCommit": zod.string().nullish(),
@@ -915,11 +1099,15 @@ export const GetAnalyticsOverviewQueryParams = zod.object({
 export const GetAnalyticsOverviewResponse = zod.object({
   "period": zod.string(),
   "totalIssues": zod.number(),
+  "analyzedIssues": zod.number(),
   "resolvedIssues": zod.number(),
   "openIssues": zod.number(),
-  "regressions": zod.number(),
+  "bugsDetected": zod.number(),
+  "regressions": zod.number().nullable(),
   "duplicatesFound": zod.number(),
-  "avgResolutionDays": zod.number(),
+  "avgResolutionDays": zod.number().nullable(),
+  "averageAnalysisLatencyMs": zod.number().nullable(),
+  "retrievalSuccessRate": zod.number().nullable(),
   "issuesByPriority": zod.array(zod.object({
   "category": zod.string(),
   "count": zod.number()
@@ -962,7 +1150,8 @@ export const GlobalSearchResponse = zod.object({
   "description": zod.string().nullish(),
   "repositoryName": zod.string().nullish(),
   "url": zod.string().nullish(),
-  "score": zod.number(),
+  "score": zod.number().nullable(),
+  "matchType": zod.string().optional(),
   "timestamp": zod.string().nullish()
 })),
   "issues": zod.array(zod.object({
@@ -972,7 +1161,19 @@ export const GlobalSearchResponse = zod.object({
   "description": zod.string().nullish(),
   "repositoryName": zod.string().nullish(),
   "url": zod.string().nullish(),
-  "score": zod.number(),
+  "score": zod.number().nullable(),
+  "matchType": zod.string().optional(),
+  "timestamp": zod.string().nullish()
+})),
+  "code": zod.array(zod.object({
+  "id": zod.string(),
+  "type": zod.string(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "repositoryName": zod.string().nullish(),
+  "url": zod.string().nullish(),
+  "score": zod.number().nullable(),
+  "matchType": zod.string().optional(),
   "timestamp": zod.string().nullish()
 })),
   "commits": zod.array(zod.object({
@@ -982,7 +1183,8 @@ export const GlobalSearchResponse = zod.object({
   "description": zod.string().nullish(),
   "repositoryName": zod.string().nullish(),
   "url": zod.string().nullish(),
-  "score": zod.number(),
+  "score": zod.number().nullable(),
+  "matchType": zod.string().optional(),
   "timestamp": zod.string().nullish()
 })),
   "pullRequests": zod.array(zod.object({
@@ -992,7 +1194,8 @@ export const GlobalSearchResponse = zod.object({
   "description": zod.string().nullish(),
   "repositoryName": zod.string().nullish(),
   "url": zod.string().nullish(),
-  "score": zod.number(),
+  "score": zod.number().nullable(),
+  "matchType": zod.string().optional(),
   "timestamp": zod.string().nullish()
 })),
   "components": zod.array(zod.object({
@@ -1002,7 +1205,8 @@ export const GlobalSearchResponse = zod.object({
   "description": zod.string().nullish(),
   "repositoryName": zod.string().nullish(),
   "url": zod.string().nullish(),
-  "score": zod.number(),
+  "score": zod.number().nullable(),
+  "matchType": zod.string().optional(),
   "timestamp": zod.string().nullish()
 })),
   "releases": zod.array(zod.object({
@@ -1012,7 +1216,8 @@ export const GlobalSearchResponse = zod.object({
   "description": zod.string().nullish(),
   "repositoryName": zod.string().nullish(),
   "url": zod.string().nullish(),
-  "score": zod.number(),
+  "score": zod.number().nullable(),
+  "matchType": zod.string().optional(),
   "timestamp": zod.string().nullish()
 }))
 })
@@ -1143,17 +1348,107 @@ export const DeleteApiKeyResponse = zod.object({
 
 
 /**
+ * @summary Get the authenticated GHIC workspace account
+ */
+export const GetCurrentAccountResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "avatarUrl": zod.string().nullable(),
+  "role": zod.enum(['viewer', 'member', 'admin', 'owner']),
+  "settings": zod.object({
+  "displayName": zod.string().nullable(),
+  "avatarUrl": zod.string().nullable(),
+  "theme": zod.enum(['system', 'light', 'dark']),
+  "timezone": zod.string(),
+  "emailPreferences": zod.object({
+  "productUpdates": zod.boolean(),
+  "weeklyDigest": zod.boolean()
+}),
+  "notificationPreferences": zod.object({
+  "criticalAlerts": zod.boolean(),
+  "regressions": zod.boolean(),
+  "duplicates": zod.boolean()
+})
+}),
+  "createdAt": zod.string().nullish(),
+  "lastLogin": zod.string().nullish()
+})
+
+
+/**
+ * @summary Update the authenticated user's persisted preferences
+ */
+export const UpdateCurrentAccountSettingsBody = zod.object({
+  "displayName": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish(),
+  "theme": zod.enum(['system', 'light', 'dark']).optional(),
+  "timezone": zod.string().optional(),
+  "emailPreferences": zod.record(zod.string(), zod.boolean()).optional(),
+  "notificationPreferences": zod.record(zod.string(), zod.boolean()).optional()
+})
+
+export const UpdateCurrentAccountSettingsResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "avatarUrl": zod.string().nullable(),
+  "role": zod.enum(['viewer', 'member', 'admin', 'owner']),
+  "settings": zod.object({
+  "displayName": zod.string().nullable(),
+  "avatarUrl": zod.string().nullable(),
+  "theme": zod.enum(['system', 'light', 'dark']),
+  "timezone": zod.string(),
+  "emailPreferences": zod.object({
+  "productUpdates": zod.boolean(),
+  "weeklyDigest": zod.boolean()
+}),
+  "notificationPreferences": zod.object({
+  "criticalAlerts": zod.boolean(),
+  "regressions": zod.boolean(),
+  "duplicates": zod.boolean()
+})
+}),
+  "createdAt": zod.string().nullish(),
+  "lastLogin": zod.string().nullish()
+})
+
+
+/**
  * @summary Get organization details
  */
 export const GetOrganizationResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
+  "workspaceName": zod.string(),
   "slug": zod.string(),
   "avatarUrl": zod.string().nullish(),
   "plan": zod.string(),
   "memberCount": zod.number(),
   "repositoryCount": zod.number(),
-  "createdAt": zod.string()
+  "createdAt": zod.string().nullable(),
+  "updatedAt": zod.string().nullable()
+})
+
+
+/**
+ * @summary Rename the GHIC workspace (owner only)
+ */
+export const UpdateOrganizationBody = zod.object({
+  "workspaceName": zod.string()
+})
+
+export const UpdateOrganizationResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "workspaceName": zod.string(),
+  "slug": zod.string(),
+  "avatarUrl": zod.string().nullish(),
+  "plan": zod.string(),
+  "memberCount": zod.number(),
+  "repositoryCount": zod.number(),
+  "createdAt": zod.string().nullable(),
+  "updatedAt": zod.string().nullable()
 })
 
 
@@ -1173,7 +1468,7 @@ export const ListMembersResponse = zod.object({
   "email": zod.string().nullish(),
   "avatarUrl": zod.string().nullish(),
   "role": zod.string(),
-  "joinedAt": zod.string(),
+  "joinedAt": zod.string().nullable(),
   "lastActiveAt": zod.string().nullish()
 })),
   "total": zod.number(),
@@ -1200,7 +1495,7 @@ export const UpdateMemberResponse = zod.object({
   "email": zod.string().nullish(),
   "avatarUrl": zod.string().nullish(),
   "role": zod.string(),
-  "joinedAt": zod.string(),
+  "joinedAt": zod.string().nullable(),
   "lastActiveAt": zod.string().nullish()
 })
 
@@ -1294,26 +1589,31 @@ export const GetSystemHealthResponse = zod.object({
   "overall": zod.string(),
   "webhookStatus": zod.string(),
   "queueStatus": zod.string(),
-  "queueLength": zod.number(),
+  "queueLength": zod.number().nullable(),
   "databaseStatus": zod.string(),
   "vectorStoreStatus": zod.string(),
   "embeddingProviderStatus": zod.string(),
   "llmProviderStatus": zod.string(),
   "repositoryIntelligenceStatus": zod.string(),
   "engineeringIntelligenceStatus": zod.string(),
+  "automationStatus": zod.string(),
+  "autoIndex": zod.boolean().nullable(),
   "githubApiStatus": zod.string(),
-  "githubApiRateLimit": zod.number(),
-  "githubApiRateLimitRemaining": zod.number(),
-  "processingLatencyMs": zod.number(),
-  "averageResponseTimeMs": zod.number(),
-  "failedJobsLast24h": zod.number(),
-  "uptimePercent": zod.number(),
+  "githubApiRateLimit": zod.number().nullable(),
+  "githubApiRateLimitRemaining": zod.number().nullable(),
+  "processingLatencyMs": zod.number().nullable(),
+  "averageResponseTimeMs": zod.number().nullable(),
+  "failedJobsLast24h": zod.number().nullable(),
+  "uptimePercent": zod.number().nullable(),
   "lastCheckedAt": zod.string(),
+  "version": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "embeddingSignature": zod.string().nullish(),
   "services": zod.array(zod.object({
   "name": zod.string(),
   "status": zod.string(),
   "latencyMs": zod.number().nullish(),
   "errorMessage": zod.string().nullish(),
   "lastCheckedAt": zod.string()
-}))
+})).optional()
 })
