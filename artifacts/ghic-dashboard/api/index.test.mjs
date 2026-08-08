@@ -87,6 +87,7 @@ test("unauthenticated requests receive 401 before product data is read", async (
   await handler(request("dashboard/overview"), res);
   assert.equal(res.statusCode, 401);
   assert.equal(res.body.code, "authentication_required");
+  assert.equal(res.headers["cache-control"], "private, no-store");
   assert.equal(dataRead, false);
 });
 

@@ -288,6 +288,7 @@ export function createHandler(overrides = {}) {
 
   return async function handler(req, res) {
     const { url, path, segments } = parsePath(req);
+    res.setHeader("cache-control", "private, no-store");
     let viewer;
     try {
       const claims = await dependencies.verifyRequest(req);
@@ -304,7 +305,6 @@ export function createHandler(overrides = {}) {
     }
 
     try {
-      res.setHeader("cache-control", "private, no-store");
       if (path === "me" && req.method === "GET") {
         res.status(200).json(viewer);
         return;
