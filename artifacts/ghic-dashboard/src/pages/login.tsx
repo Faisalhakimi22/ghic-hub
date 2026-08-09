@@ -32,6 +32,11 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-background px-6">
       <div className="w-full max-w-md border border-border bg-card p-8 flex flex-col gap-6">
         <div className="flex flex-col gap-2">
+          <img
+            src="/logo.png"
+            alt="GHIC"
+            className="h-10 w-10 object-contain"
+          />
           <span className="text-[10px] font-display tracking-widest uppercase font-bold text-muted-foreground">
             GHIC Dashboard
           </span>

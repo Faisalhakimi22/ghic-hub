@@ -8,7 +8,6 @@ import {
   CheckSquare,
   Code,
   Copy,
-  Cpu,
   FolderGit2,
   GitCommit,
   GitPullRequest,
@@ -91,8 +90,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <aside className="w-56 shrink-0 border-r border-border flex flex-col justify-between bg-card relative z-10">
         <div className="flex-1 overflow-y-auto py-4 flex flex-col gap-6">
           <div className="px-4 mb-2 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-primary">
-              <Cpu className="w-5 h-5" />
+            <div className="flex items-center gap-2 min-w-0">
+              <img
+                src="/logo.png"
+                alt="GHIC"
+                className="h-6 w-6 shrink-0 object-contain"
+              />
               <span className="font-display font-bold tracking-widest uppercase text-sm">
                 GHIC
               </span>
