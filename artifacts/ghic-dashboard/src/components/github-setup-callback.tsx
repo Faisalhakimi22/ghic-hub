@@ -1,0 +1,165 @@
+import React from 'react';
+import { CheckCircle2, Github, Loader2, TriangleAlert } from 'lucide-react';
+
+import {
+  clearSetupParams,
+  readSetupParams,
+  useCompleteInstallation,
+  type InstallationResult,
+} from '@/lib/github-connection';
+
+/**
+ * The post-install landing step.
+ *
+ * GitHub redirects to the App's Setup URL, the marketing site forwards the
+ * query string here, and this is where those parameters stop being a
+ * message to the user and start being a server-verified fact: it posts the
+ * installation id to GHIC, which re-reads it from GitHub before writing
+ * anything.
+ *
+ * It runs exactly once per page load. The parameters are stripped as soon
+ * as the request is sent, so a refresh cannot replay the callback, and the
+ * effect is guarded by a ref because React mounts effects twice in
+ * development StrictMode and the second run would otherwise fire a second
+ * request.
+ */
+export function GitHubSetupCallback({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const [params] = React.useState(() => readSetupParams());
+  const [done, setDone] = React.useState(!params.present);
+  const [result, setResult] = React.useState<InstallationResult | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const complete = useCompleteInstallation();
+  const started = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!params.present || started.current) return;
+    started.current = true;
+
+    // `request` means the user asked an organization owner to approve the
+    // installation. Nothing is installed yet and there is no installation
+    // id to verify, so recording a connection would be a lie.
+    if (params.setupAction === 'request' || !params.installationId) {
+      clearSetupParams();
+      setResult({ ok: true, setupAction: params.setupAction ?? 'request' });
+      setDone(true);
+      return;
+    }
+
+    clearSetupParams();
+    complete
+      .mutateAsync({
+        installationId: params.installationId,
+        setupAction: params.setupAction,
+      })
+      .then(setResult)
+      .catch((caught: unknown) => {
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : 'GHIC could not verify the GitHub App installation.',
+        );
+      });
+    // `complete` is a stable mutation object; the ref guard is what makes
+    // this run once, not the dependency list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
+
+  if (done && !result) return <>{children}</>;
+
+  if (!done && !result && !error) {
+    return (
+      <Panel
+        icon={<Loader2 className="w-4 h-4 animate-spin" />}
+        title="Connecting GitHub"
+        body="GHIC is verifying the installation with GitHub and recording which repositories you selected."
+      />
+    );
+  }
+
+  if (error) {
+    return (
+      <Panel
+        icon={<TriangleAlert className="w-4 h-4" />}
+        title="GitHub connection failed"
+        body={error}
+        action={
+          <button
+            onClick={() => {
+              setError(null);
+              setDone(true);
+            }}
+            className="w-full bg-primary text-primary-foreground px-5 py-3 font-display tracking-widest uppercase text-xs font-bold hover:bg-primary/90"
+          >
+            Continue to the hub
+          </button>
+        }
+      />
+    );
+  }
+
+  const pending = result?.setupAction === 'request';
+  return (
+    <Panel
+      icon={
+        pending ? (
+          <Github className="w-4 h-4" />
+        ) : (
+          <CheckCircle2 className="w-4 h-4" />
+        )
+      }
+      title={pending ? 'Approval requested' : 'GitHub connected'}
+      body={
+        pending
+          ? 'An organization owner has to approve the GHIC installation. Repositories appear here once they do.'
+          : `${result?.repositoryCount ?? 0} repositor${
+              result?.repositoryCount === 1 ? 'y' : 'ies'
+            } connected${
+              result?.accountLogin ? ` from ${result.accountLogin}` : ''
+            }. Indexing status appears as GHIC processes them.`
+      }
+      action={
+        <button
+          onClick={() => {
+            setResult(null);
+            setDone(true);
+            window.history.replaceState({}, '', '/repositories');
+          }}
+          className="w-full bg-primary text-primary-foreground px-5 py-3 font-display tracking-widest uppercase text-xs font-bold hover:bg-primary/90"
+        >
+          View repositories
+        </button>
+      }
+    />
+  );
+}
+
+function Panel({
+  icon,
+  title,
+  body,
+  action,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background px-6">
+      <div className="w-full max-w-md border border-border bg-card p-8 flex flex-col gap-5">
+        <span className="flex items-center gap-2 text-[10px] font-display tracking-widest uppercase font-bold text-muted-foreground">
+          {icon} GitHub App
+        </span>
+        <h1 className="text-2xl font-display font-bold tracking-tight uppercase">
+          {title}
+        </h1>
+        <p className="text-sm text-muted-foreground leading-relaxed">{body}</p>
+        {action}
+      </div>
+    </div>
+  );
+}

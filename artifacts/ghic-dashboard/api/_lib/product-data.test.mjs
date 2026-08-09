@@ -5,6 +5,7 @@ import {
   activityFromLedgerRow,
   buildAlerts,
   buildDashboardOverview,
+  buildRepositoryQuery,
   issueFromRow,
   normalizeRepositoryRow,
 } from "./product-data.mjs";
@@ -194,4 +195,86 @@ test("overview derives index activity and high-priority alerts only from persist
   assert.equal(overview.recentActivity[0].type, "repository_indexed");
   assert.equal(overview.alerts[0].id, "high-priority-acme~widgets~42");
   assert.equal(overview.alerts[0].severity, "high");
+});
+
+// --- Repository listing sources -------------------------------------------
+
+test("the repository query lists connected repositories even with no index state", () => {
+  const sql = buildRepositoryQuery({
+    githubRepositories: true,
+    repositoryState: true,
+    repoChunks: true,
+    ledger: true,
+  });
+  // The listing is a union, not a projection of the index table: a
+  // repository selected during installation has no ghic_repository_state
+  // row until something indexes it, and it still has to appear.
+  assert.match(sql, /SELECT repo FROM connected\s+UNION\s+SELECT repo FROM repository_state/);
+  assert.match(sql, /FROM ghic_github_repositories WHERE active = true/);
+  assert.match(sql, /COALESCE\(repository_state\.state, 'not_indexed'\) AS state/);
+});
+
+test("the repository query degrades to stub CTEs when a table is absent", () => {
+  const sql = buildRepositoryQuery({
+    githubRepositories: false,
+    repositoryState: true,
+    repoChunks: false,
+    ledger: false,
+  });
+  // Never references a table that does not exist on this deployment.
+  assert.doesNotMatch(sql, /FROM ghic_github_repositories/);
+  assert.doesNotMatch(sql, /FROM ghic_repo_chunks/);
+  assert.doesNotMatch(sql, /FROM ghic_ledger/);
+  // But still selects the same shape, so the caller needs no branch.
+  assert.match(sql, /AS connected_count/);
+});
+
+test("status filtering treats an unindexed connected repository as not_indexed", () => {
+  const sql = buildRepositoryQuery({
+    githubRepositories: true,
+    repositoryState: true,
+    repoChunks: true,
+    ledger: true,
+  });
+  // Without the COALESCE a `status=not_indexed` filter would compare
+  // against NULL and silently return nothing.
+  assert.match(
+    sql,
+    /COALESCE\(repository_state\.state, 'not_indexed'\) = \$3::text/,
+  );
+});
+
+test("a connected repository reports live App access", () => {
+  const row = normalizeRepositoryRow({
+    repo: "acme/widgets",
+    state: "not_indexed",
+    connected: true,
+    connected_at: "2026-08-01T00:00:00Z",
+    installation_id: "100",
+    repository_private: false,
+  });
+  assert.equal(row.connected, true);
+  assert.equal(row.installationStatus, "installed");
+  assert.equal(row.indexStatus, "not_indexed");
+  assert.equal(row.visibility, "public");
+  assert.equal(row.connectedAt, "2026-08-01T00:00:00.000Z");
+});
+
+test("an installation id seen only in past analyses is not reported as connected", () => {
+  // GHIC processed an issue here once. That is evidence the App was
+  // installed then, not that it grants access now.
+  const row = normalizeRepositoryRow({
+    repo: "acme/legacy",
+    state: "ready",
+    connected: false,
+    installation_id: "100",
+  });
+  assert.equal(row.connected, false);
+  assert.notEqual(row.installationStatus, "installed");
+});
+
+test("a repository with no installation evidence at all reports none", () => {
+  const row = normalizeRepositoryRow({ repo: "acme/orphan", state: "ready" });
+  assert.equal(row.connected, false);
+  assert.equal(row.installationStatus, "not_installed");
 });

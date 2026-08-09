@@ -5,6 +5,7 @@ import { Shell } from "@/components/layout/Shell";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import Login from "@/pages/login";
 import { DataError } from "@/components/data-state";
+import { GitHubSetupCallback } from "@/components/github-setup-callback";
 import { useCurrentAccount } from "@/lib/account";
 
 // Pages
@@ -123,10 +124,15 @@ function ProtectedApp() {
     );
   }
 
+  // Mounted inside the gate so the installation callback is posted with a
+  // verified session. GitHub redirects to the hub root, so this has to sit
+  // above the router rather than on any one page.
   return (
-    <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-      <Router />
-    </WouterRouter>
+    <GitHubSetupCallback>
+      <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+        <Router />
+      </WouterRouter>
+    </GitHubSetupCallback>
   );
 }
 

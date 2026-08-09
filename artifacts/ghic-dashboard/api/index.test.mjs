@@ -66,6 +66,22 @@ function dependencies(overrides = {}) {
     readAnalytics: async () => ({}),
     readDuplicateCandidates: async () => ({ items: [], total: 0 }),
     searchProductData: async () => ({ total: 0 }),
+    getGitHubConnectionSummary: async () => ({
+      configured: true,
+      installUrl: "https://github.com/apps/ghic/installations/new",
+      installations: [],
+    }),
+    completeGitHubInstallation: async (viewer, input) => ({
+      ok: true,
+      installationId: Number(input.installationId),
+      viewerId: viewer.id,
+      repositoryCount: 0,
+      repositories: [],
+    }),
+    refreshGitHubInstallation: async (viewer, id) => ({
+      ok: true,
+      installationId: Number(id),
+    }),
     ...overrides,
   };
 }
@@ -265,4 +281,251 @@ test("owner can manage every valid role", async () => {
   );
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.role, "owner");
+});
+
+// --- GitHub App connection -------------------------------------------------
+
+test("the GitHub connection summary requires authentication", async () => {
+  let reached = false;
+  const handler = createHandler(
+    dependencies({
+      verifyRequest: async () => {
+        throw new AuthError("Missing bearer token.");
+      },
+      getGitHubConnectionSummary: async () => {
+        reached = true;
+        return {};
+      },
+    }),
+  );
+  const res = response();
+  await handler(request("github/connection"), res);
+  assert.equal(res.statusCode, 401);
+  assert.equal(res.body.code, "authentication_required");
+  assert.equal(reached, false);
+});
+
+test("completing an installation requires authentication", async () => {
+  let reached = false;
+  const handler = createHandler(
+    dependencies({
+      verifyRequest: async () => {
+        throw new AuthError("Missing bearer token.");
+      },
+      completeGitHubInstallation: async () => {
+        reached = true;
+        return {};
+      },
+    }),
+  );
+  const res = response();
+  await handler(
+    request("github/installations", {
+      method: "POST",
+      body: { installationId: 42 },
+    }),
+    res,
+  );
+  assert.equal(res.statusCode, 401);
+  assert.equal(reached, false);
+});
+
+test("an authenticated installation callback reaches the verifier with the viewer", async () => {
+  let seen = null;
+  const handler = createHandler(
+    dependencies({
+      completeGitHubInstallation: async (viewer, input) => {
+        seen = { viewer, input };
+        return { ok: true, installationId: 99, repositoryCount: 2 };
+      },
+    }),
+  );
+  const res = response();
+  await handler(
+    request("github/installations", {
+      method: "POST",
+      role: "owner",
+      body: { installationId: 99, setupAction: "install" },
+    }),
+    res,
+  );
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.repositoryCount, 2);
+  // The viewer comes from the verified token, never from the request body.
+  assert.equal(seen.viewer.id, "uid-owner");
+  assert.equal(seen.input.installationId, 99);
+});
+
+test("a cancelled installation is not an error", async () => {
+  const handler = createHandler(
+    dependencies({
+      completeGitHubInstallation: async () => ({ ok: true, cancelled: true }),
+    }),
+  );
+  const res = response();
+  await handler(
+    request("github/installations", {
+      method: "POST",
+      body: { setupAction: "cancel" },
+    }),
+    res,
+  );
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.cancelled, true);
+});
+
+test("an installation owned by another GitHub account is refused", async () => {
+  const handler = createHandler(
+    dependencies({
+      completeGitHubInstallation: async () => {
+        throw Object.assign(
+          new Error(
+            "This GitHub App installation belongs to a different GitHub user.",
+          ),
+          { status: 403, code: "installation_user_mismatch" },
+        );
+      },
+    }),
+  );
+  const res = response();
+  await handler(
+    request("github/installations", {
+      method: "POST",
+      body: { installationId: 7 },
+    }),
+    res,
+  );
+  assert.equal(res.statusCode, 403);
+  assert.equal(res.body.code, "installation_user_mismatch");
+});
+
+test("an installation already claimed by another member returns 409", async () => {
+  const handler = createHandler(
+    dependencies({
+      completeGitHubInstallation: async () => {
+        throw Object.assign(new Error("Already linked."), {
+          status: 409,
+          code: "installation_already_linked",
+        });
+      },
+    }),
+  );
+  const res = response();
+  await handler(
+    request("github/installations", {
+      method: "POST",
+      body: { installationId: 7 },
+    }),
+    res,
+  );
+  assert.equal(res.statusCode, 409);
+  assert.equal(res.body.code, "installation_already_linked");
+});
+
+test("an installation GitHub no longer knows about returns 404", async () => {
+  const handler = createHandler(
+    dependencies({
+      completeGitHubInstallation: async () => {
+        throw Object.assign(new Error("GitHub installation was not found."), {
+          status: 404,
+          code: "installation_not_found",
+        });
+      },
+    }),
+  );
+  const res = response();
+  await handler(
+    request("github/installations", {
+      method: "POST",
+      body: { installationId: 7 },
+    }),
+    res,
+  );
+  assert.equal(res.statusCode, 404);
+  assert.equal(res.body.code, "installation_not_found");
+});
+
+test("a GitHub API failure is reported as upstream, not as a database outage", async () => {
+  const handler = createHandler(
+    dependencies({
+      completeGitHubInstallation: async () => {
+        throw Object.assign(new Error("GitHub repository listing failed."), {
+          status: 502,
+          code: "github_api_error",
+        });
+      },
+    }),
+  );
+  const res = response();
+  await handler(
+    request("github/installations", {
+      method: "POST",
+      body: { installationId: 7 },
+    }),
+    res,
+  );
+  assert.equal(res.statusCode, 502);
+  assert.equal(res.body.code, "github_api_error");
+});
+
+test("an unconfigured GitHub App says so instead of blaming Postgres", async () => {
+  const handler = createHandler(
+    dependencies({
+      completeGitHubInstallation: async () => {
+        throw Object.assign(
+          new Error("GitHub App credentials are not configured."),
+          { status: 503, code: "github_app_not_configured" },
+        );
+      },
+    }),
+  );
+  const res = response();
+  await handler(
+    request("github/installations", {
+      method: "POST",
+      body: { installationId: 7 },
+    }),
+    res,
+  );
+  assert.equal(res.statusCode, 503);
+  assert.equal(res.body.code, "github_app_not_configured");
+  assert.match(res.body.error, /credentials are not configured/);
+});
+
+test("re-syncing an installation that is not connected returns 404", async () => {
+  const handler = createHandler(
+    dependencies({
+      refreshGitHubInstallation: async () => {
+        throw Object.assign(
+          new Error("That installation is not connected to this workspace."),
+          { status: 404, code: "installation_not_connected" },
+        );
+      },
+    }),
+  );
+  const res = response();
+  await handler(
+    request("github/installations/5/refresh", { method: "POST" }),
+    res,
+  );
+  assert.equal(res.statusCode, 404);
+  assert.equal(res.body.code, "installation_not_connected");
+});
+
+test("re-syncing a connected installation reaches the refresh path", async () => {
+  const handler = createHandler(dependencies());
+  const res = response();
+  await handler(
+    request("github/installations/5/refresh", { method: "POST" }),
+    res,
+  );
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.installationId, 5);
+});
+
+test("the GitHub connection routes reject methods they do not define", async () => {
+  const handler = createHandler(dependencies());
+  const res = response();
+  await handler(request("github/connection", { method: "DELETE" }), res);
+  assert.equal(res.statusCode, 405);
 });

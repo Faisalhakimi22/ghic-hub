@@ -22,6 +22,11 @@ import {
   updateUserSettings,
 } from "./_lib/db.mjs";
 import {
+  completeGitHubInstallation,
+  getGitHubConnectionSummary,
+  refreshGitHubInstallation,
+} from "./_lib/github-installations.mjs";
+import {
   activityFromLedgerRow,
   buildDashboardOverview,
   issueDetail,
@@ -199,7 +204,27 @@ function errorPayload(error) {
       body: { code: error.code || "request_error", error: error.message },
     };
   }
-  if (status === 503 || !dbConfigured || error.name === "NeonDbError") {
+  // GitHub API failures are upstream, not database failures. Without this
+  // they fall through to the generic 500 and the caller loses the reason.
+  if (status === 502) {
+    return {
+      status,
+      body: { code: error.code || "github_api_error", error: error.message },
+    };
+  }
+  if (status === 503) {
+    return {
+      status,
+      body: {
+        code: error.code || "database_unavailable",
+        error:
+          error.code === "github_app_not_configured"
+            ? error.message
+            : "Dashboard data is temporarily unavailable because PostgreSQL could not be queried.",
+      },
+    };
+  }
+  if (!dbConfigured || error.name === "NeonDbError") {
     return {
       status: 503,
       body: {
@@ -235,6 +260,9 @@ const productionDependencies = {
   readAnalytics,
   readDuplicateCandidates,
   searchProductData,
+  getGitHubConnectionSummary,
+  completeGitHubInstallation,
+  refreshGitHubInstallation,
 };
 
 export function createHandler(overrides = {}) {
@@ -380,6 +408,40 @@ export function createHandler(overrides = {}) {
         res
           .status(200)
           .json(await dependencies.updateUserRole(target.id, role));
+        return;
+      }
+
+      // GitHub connection. These are the only write surfaces besides account
+      // and organization administration, so they sit above the read-only
+      // guard below.
+      if (path === "github/connection" && req.method === "GET") {
+        res.status(200).json(await dependencies.getGitHubConnectionSummary());
+        return;
+      }
+      if (path === "github/installations" && req.method === "POST") {
+        // The browser supplies only an installation id. It is a claim, not a
+        // credential: completeGitHubInstallation re-reads the installation
+        // from GitHub with the App's own JWT and refuses it unless this
+        // viewer's GitHub identity owns or administers the account it
+        // belongs to.
+        const payload = await readJson(req);
+        res
+          .status(200)
+          .json(await dependencies.completeGitHubInstallation(viewer, payload));
+        return;
+      }
+      if (
+        segments[0] === "github" &&
+        segments[1] === "installations" &&
+        segments[2] &&
+        segments[3] === "refresh" &&
+        req.method === "POST"
+      ) {
+        res
+          .status(200)
+          .json(
+            await dependencies.refreshGitHubInstallation(viewer, segments[2]),
+          );
         return;
       }
 

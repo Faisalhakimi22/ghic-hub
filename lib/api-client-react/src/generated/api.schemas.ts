@@ -160,6 +160,10 @@ export interface Repository {
   engineeringIntelligenceStatus: string;
   webhookStatus: string;
   installationStatus: string;
+  /** True when a live GitHub App installation currently grants GHIC access. */
+  connected?: boolean;
+  /** @nullable */
+  connectedAt?: string | null;
   /** @nullable */
   description?: string | null;
   url: string;

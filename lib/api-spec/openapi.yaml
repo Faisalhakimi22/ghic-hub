@@ -1232,6 +1232,11 @@ components:
         engineeringIntelligenceStatus: { type: string }
         webhookStatus: { type: string }
         installationStatus: { type: string }
+        # True when a live GitHub App installation currently grants GHIC
+        # access to this repository, as opposed to GHIC merely holding an
+        # index built while an earlier installation existed.
+        connected: { type: boolean }
+        connectedAt: { type: ["string", "null"] }
         description: { type: ["string", "null"] }
         url: { type: string }
         createdAt: { type: ["string", "null"] }

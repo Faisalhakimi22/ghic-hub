@@ -71,6 +71,39 @@ function ready() {
         updated_by   TEXT,
         CONSTRAINT ghic_org_settings_single_row CHECK (id = 1)
       )`;
+    await q`
+      CREATE TABLE IF NOT EXISTS ghic_github_installations (
+        installation_id BIGINT PRIMARY KEY,
+        account_login   TEXT NOT NULL,
+        account_type    TEXT NOT NULL,
+        account_github_id BIGINT,
+        repository_selection TEXT,
+        connected_by_firebase_uid TEXT NOT NULL,
+        connected_by_github_id TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        revoked_at TIMESTAMPTZ
+      )`;
+    await q`
+      CREATE INDEX IF NOT EXISTS ghic_github_installations_active_idx
+      ON ghic_github_installations (revoked_at)
+      WHERE revoked_at IS NULL`;
+    await q`
+      CREATE TABLE IF NOT EXISTS ghic_github_repositories (
+        repo_full_name TEXT PRIMARY KEY,
+        installation_id BIGINT NOT NULL REFERENCES ghic_github_installations(installation_id),
+        github_repo_id BIGINT,
+        private BOOLEAN NOT NULL DEFAULT false,
+        default_branch TEXT,
+        html_url TEXT,
+        active BOOLEAN NOT NULL DEFAULT true,
+        connected_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        removed_at TIMESTAMPTZ
+      )`;
+    await q`
+      CREATE INDEX IF NOT EXISTS ghic_github_repositories_installation_idx
+      ON ghic_github_repositories (installation_id)`;
   })();
   return _ready;
 }

@@ -55,33 +55,53 @@ export async function sourceCapabilities() {
     SELECT
       to_regclass('public.ghic_ledger') IS NOT NULL AS ledger,
       to_regclass('public.ghic_repository_state') IS NOT NULL AS repository_state,
-      to_regclass('public.ghic_repo_chunks') IS NOT NULL AS repo_chunks`;
+      to_regclass('public.ghic_repo_chunks') IS NOT NULL AS repo_chunks,
+      to_regclass('public.ghic_github_repositories') IS NOT NULL AS github_repositories`;
   return {
     ledger: Boolean(row?.ledger),
     repositoryState: Boolean(row?.repository_state),
     repoChunks: Boolean(row?.repo_chunks),
+    githubRepositories: Boolean(row?.github_repositories),
   };
 }
 
-export async function readRepositories({
-  page = 1,
-  limit = 50,
-  search = "",
-  language = "",
-  status = "",
-} = {}) {
-  const q = await database();
-  const capabilities = await sourceCapabilities();
-  const paging = pagination(page, limit);
-  if (!capabilities.repositoryState) {
-    return {
-      items: [],
-      total: 0,
-      indexedTotal: 0,
-      ...paging,
-      available: true,
-    };
-  }
+/**
+ * Build the repository listing SQL for a given set of available tables.
+ *
+ * Pure and exported so the statement can be parsed and asserted on
+ * without a database: this query has four shapes depending on which
+ * tables exist, and a syntax error in the branch that only runs on a
+ * deployment without pgvector would otherwise surface in production.
+ */
+export function buildRepositoryQuery(capabilities) {
+  // A repository is listed because it is connected through the GitHub App,
+  // because GHIC has indexed it, or both. Connection is what the user
+  // controls, so a repository selected during installation appears here
+  // immediately -- before any indexing has happened, with its true
+  // not_indexed state -- rather than being invisible until an index run
+  // creates a ghic_repository_state row. The union keeps repositories that
+  // GHIC indexed before installation metadata was persisted.
+  const connected = capabilities.githubRepositories
+    ? `connected AS (
+         SELECT repo_full_name AS repo, private, html_url, default_branch,
+                installation_id, connected_at
+         FROM ghic_github_repositories WHERE active = true
+       )`
+    : `connected AS (
+         SELECT NULL::text AS repo, NULL::boolean AS private,
+                NULL::text AS html_url, NULL::text AS default_branch,
+                NULL::bigint AS installation_id,
+                NULL::timestamptz AS connected_at
+         WHERE false
+       )`;
+  const stateSource = capabilities.repositoryState
+    ? `repository_state AS (
+         SELECT repo, state, data, updated_at FROM ghic_repository_state
+       )`
+    : `repository_state AS (
+         SELECT NULL::text AS repo, NULL::text AS state, NULL::jsonb AS data,
+                NULL::timestamptz AS updated_at WHERE false
+       )`;
 
   const chunkCounts = capabilities.repoChunks
     ? `chunk_counts AS (
@@ -115,21 +135,38 @@ export async function readRepositories({
   const actualFileCount = capabilities.repoChunks
     ? "COALESCE(chunks.actual_file_count, 0)"
     : "NULL::int";
-  const rows = await q(
-    `WITH ${chunkCounts}, ${latestAnalyses}
-     SELECT repository_state.repo, repository_state.state,
-            repository_state.data, repository_state.updated_at,
+  return `WITH ${connected}, ${stateSource}, ${chunkCounts}, ${latestAnalyses},
+       all_repos AS (
+         SELECT repo FROM connected
+         UNION
+         SELECT repo FROM repository_state
+       )
+     SELECT all_repos.repo,
+            COALESCE(repository_state.state, 'not_indexed') AS state,
+            repository_state.data,
+            COALESCE(repository_state.updated_at, connected.connected_at) AS updated_at,
             ${actualChunkCount} AS actual_chunk_count,
             ${actualFileCount} AS actual_file_count,
-            analyses.repository_private, analyses.repository_url,
-            analyses.installation_id,
+            COALESCE(to_jsonb(connected.private), analyses.repository_private)
+              AS repository_private,
+            COALESCE(connected.html_url, analyses.repository_url) AS repository_url,
+            COALESCE(connected.installation_id::text, analyses.installation_id)
+              AS installation_id,
+            connected.default_branch AS connected_default_branch,
+            connected.connected_at,
+            (connected.repo IS NOT NULL) AS connected,
             count(*) OVER ()::int AS total_count,
-            count(*) FILTER (WHERE repository_state.state = 'ready') OVER ()::int AS indexed_count
-     FROM ghic_repository_state repository_state
+            count(*) FILTER (WHERE repository_state.state = 'ready')
+              OVER ()::int AS indexed_count,
+            count(*) FILTER (WHERE connected.repo IS NOT NULL)
+              OVER ()::int AS connected_count
+     FROM all_repos
+     LEFT JOIN connected USING (repo)
+     LEFT JOIN repository_state USING (repo)
      LEFT JOIN chunk_counts chunks USING (repo)
      LEFT JOIN latest_analyses analyses USING (repo)
      WHERE ($1::text = '' OR lower(
-              repository_state.repo || ' ' ||
+              all_repos.repo || ' ' ||
               COALESCE(repository_state.data->>'primary_language', '') || ' ' ||
               COALESCE(repository_state.data->>'frameworks', '')
             ) LIKE '%' || lower($1::text) || '%')
@@ -137,24 +174,48 @@ export async function readRepositories({
               repository_state.data->>'primary_language',
               repository_state.data->'metadata'->>'primary_language', ''
             )) = lower($2::text))
-       AND ($3::text = '' OR repository_state.state = $3::text)
-     ORDER BY repository_state.updated_at DESC
-     LIMIT $4 OFFSET $5`,
-    [
-      String(search || "").trim(),
-      String(language || ""),
-      String(status || ""),
-      paging.limit,
-      paging.offset,
-    ],
-  );
+       AND ($3::text = '' OR COALESCE(repository_state.state, 'not_indexed') = $3::text)
+     ORDER BY COALESCE(repository_state.updated_at, connected.connected_at) DESC NULLS LAST
+     LIMIT $4 OFFSET $5`;
+}
+
+export async function readRepositories({
+  page = 1,
+  limit = 50,
+  search = "",
+  language = "",
+  status = "",
+} = {}) {
+  const q = await database();
+  const capabilities = await sourceCapabilities();
+  const paging = pagination(page, limit);
+  if (!capabilities.repositoryState && !capabilities.githubRepositories) {
+    return {
+      items: [],
+      total: 0,
+      indexedTotal: 0,
+      connectedTotal: 0,
+      ...paging,
+      available: true,
+    };
+  }
+
+  const rows = await q(buildRepositoryQuery(capabilities), [
+    String(search || "").trim(),
+    String(language || ""),
+    String(status || ""),
+    paging.limit,
+    paging.offset,
+  ]);
   const items = rows.map(normalizeRepositoryRow);
   const total = rows.length ? asNumber(rows[0].total_count, 0) : 0;
   const indexedTotal = rows.length ? asNumber(rows[0].indexed_count, 0) : 0;
+  const connectedTotal = rows.length ? asNumber(rows[0].connected_count, 0) : 0;
   return {
     items,
     total,
     indexedTotal,
+    connectedTotal,
     page: paging.page,
     limit: paging.limit,
     available: true,
@@ -217,7 +278,11 @@ export function normalizeRepositoryRow(row = {}) {
       : Array.isArray(metadata.frameworks)
         ? metadata.frameworks.join(", ") || null
         : null,
-    defaultBranch: data.default_branch || metadata.default_branch || null,
+    defaultBranch:
+      data.default_branch ||
+      metadata.default_branch ||
+      row.connected_default_branch ||
+      null,
     health,
     healthScore: null,
     riskScore: null,
@@ -226,7 +291,17 @@ export function normalizeRepositoryRow(row = {}) {
     repositoryIntelligenceStatus: state === "ready" ? "active" : state,
     engineeringIntelligenceStatus: "disabled",
     webhookStatus: "not_recorded",
-    installationStatus: row.installation_id ? "installed" : "not_recorded",
+    // `connected` is the GitHub App installation actually granting access
+    // now. An installation_id seen only in a past analysis says GHIC once
+    // had access, which is not the same claim.
+    connected: row.connected === true,
+    connectedAt: toIso(row.connected_at),
+    installationStatus:
+      row.connected === true
+        ? "installed"
+        : row.installation_id
+          ? "not_recorded"
+          : "not_installed",
     description: data.readme_summary || data.architecture_summary || null,
     architectureSummary: data.architecture_summary || "",
     url:

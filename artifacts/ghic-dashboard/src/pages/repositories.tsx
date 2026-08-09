@@ -3,12 +3,16 @@ import {
   getListRepositoriesQueryKey,
   useListRepositories,
 } from "@workspace/api-client-react";
-import { Search } from "lucide-react";
+import { Github, RefreshCw, Search } from "lucide-react";
 import { Link } from "wouter";
 
 import { DataError } from "@/components/data-state";
 import { PageContent, PageHeader, StatusBadge } from "@/components/ui/swiss";
 import { useDashboardDate } from "@/lib/account";
+import {
+  useGitHubConnection,
+  useRefreshInstallation,
+} from "@/lib/github-connection";
 
 export default function Repositories() {
   const [search, setSearch] = React.useState("");
@@ -22,14 +26,40 @@ export default function Repositories() {
     query: { queryKey: getListRepositoriesQueryKey(params) },
   });
   const formatDate = useDashboardDate();
+  const connection = useGitHubConnection();
+  const refresh = useRefreshInstallation();
+
+  const installations = connection.data?.installations ?? [];
+  const installUrl = connection.data?.installUrl;
+  const nothingConnected =
+    connection.isSuccess &&
+    installations.length === 0 &&
+    !query.isLoading &&
+    (query.data?.items.length ?? 0) === 0;
 
   return (
     <div className="flex flex-col min-h-full">
       <PageHeader
         title="Repositories"
-        description="Persisted GHIC repository indexes"
+        description="Repositories connected through the GHIC GitHub App"
       />
       <PageContent className="flex flex-col gap-4">
+        <GitHubConnectionBar
+          configured={connection.data?.configured ?? false}
+          installations={installations}
+          installUrl={installUrl}
+          onRefresh={(id) => refresh.mutate(id)}
+          refreshing={refresh.isPending}
+          refreshError={refresh.error?.message ?? null}
+        />
+
+        {nothingConnected ? (
+          <ConnectEmptyState
+            configured={connection.data?.configured ?? false}
+            installUrl={installUrl}
+          />
+        ) : null}
+
         <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-3">
           <label className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -62,6 +92,7 @@ export default function Repositories() {
                 <tr>
                   {[
                     "Repository",
+                    "Access",
                     "Health",
                     "Visibility",
                     "Language",
@@ -82,7 +113,7 @@ export default function Repositories() {
                 {query.isLoading ? (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-4 py-8 text-center text-muted-foreground animate-pulse"
                     >
                       Loading repositories...
@@ -101,6 +132,14 @@ export default function Repositories() {
                         >
                           {repository.fullName}
                         </Link>
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge
+                          status={repository.connected ? "success" : "neutral"}
+                          text={
+                            repository.connected ? "connected" : "no app access"
+                          }
+                        />
                       </td>
                       <td className="px-4 py-3">
                         <StatusBadge
@@ -145,7 +184,7 @@ export default function Repositories() {
                 ) : (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-4 py-8 text-center text-muted-foreground"
                     >
                       No repositories match the current filters.
@@ -157,6 +196,127 @@ export default function Repositories() {
           </div>
         )}
       </PageContent>
+    </div>
+  );
+}
+
+/**
+ * Where an installation is chosen.
+ *
+ * The link goes to GitHub's own installation page, which is the only place
+ * repository access can be granted. Nothing here asks the user to type an
+ * owner or repository name: the selection they make on GitHub is what GHIC
+ * reads back, so the two can never disagree.
+ */
+function GitHubConnectionBar({
+  configured,
+  installations,
+  installUrl,
+  onRefresh,
+  refreshing,
+  refreshError,
+}: {
+  configured: boolean;
+  installations: Array<{
+    installationId: number;
+    accountLogin: string;
+    accountType: string;
+    repositorySelection: string | null;
+    repositoryCount: number;
+  }>;
+  installUrl?: string;
+  onRefresh: (installationId: number) => void;
+  refreshing: boolean;
+  refreshError: string | null;
+}) {
+  if (!installations.length) return null;
+
+  return (
+    <div className="border border-border bg-card p-4 flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <span className="flex items-center gap-2 text-[10px] font-display tracking-widest uppercase font-bold text-muted-foreground">
+          <Github className="w-3.5 h-3.5" /> GitHub App
+        </span>
+        {configured && installUrl ? (
+          <a
+            href={installUrl}
+            className="text-[10px] font-display tracking-widest uppercase font-bold underline hover:text-primary"
+          >
+            Manage repository access on GitHub
+          </a>
+        ) : null}
+      </div>
+      <div className="flex flex-col gap-2">
+        {installations.map((installation) => (
+          <div
+            key={installation.installationId}
+            className="flex items-center justify-between gap-3 flex-wrap text-sm"
+          >
+            <span>
+              <span className="font-bold">{installation.accountLogin}</span>{" "}
+              <span className="text-muted-foreground">
+                {installation.accountType.toLowerCase()} ·{" "}
+                {installation.repositoryCount} repositor
+                {installation.repositoryCount === 1 ? "y" : "ies"}
+                {installation.repositorySelection === "all"
+                  ? " · all repositories"
+                  : " · selected repositories"}
+              </span>
+            </span>
+            <button
+              onClick={() => onRefresh(installation.installationId)}
+              disabled={refreshing}
+              className="flex items-center gap-2 border border-border px-3 py-1.5 text-[10px] font-display tracking-widest uppercase font-bold hover:bg-muted disabled:opacity-40"
+            >
+              <RefreshCw
+                className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`}
+              />
+              Re-sync
+            </button>
+          </div>
+        ))}
+      </div>
+      {refreshError ? (
+        <p className="text-xs text-destructive">{refreshError}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function ConnectEmptyState({
+  configured,
+  installUrl,
+}: {
+  configured: boolean;
+  installUrl?: string;
+}) {
+  return (
+    <div className="border border-border bg-card p-8 flex flex-col items-start gap-4">
+      <span className="flex items-center gap-2 text-[10px] font-display tracking-widest uppercase font-bold text-muted-foreground">
+        <Github className="w-3.5 h-3.5" /> Not connected
+      </span>
+      <h2 className="text-xl font-display font-bold tracking-tight uppercase">
+        Connect GitHub
+      </h2>
+      <p className="text-sm text-muted-foreground leading-relaxed max-w-prose">
+        Install the GHIC GitHub App and choose which repositories it can read.
+        GHIC records the selection you make on GitHub — there is nothing to type
+        here.
+      </p>
+      {configured && installUrl ? (
+        <a
+          href={installUrl}
+          className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-3 font-display tracking-widest uppercase text-xs font-bold hover:bg-primary/90"
+        >
+          <Github className="w-4 h-4" /> Install GHIC on GitHub
+        </a>
+      ) : (
+        <p className="text-xs text-muted-foreground border border-border bg-muted/30 p-3 max-w-prose">
+          The GitHub App credentials are not configured on this deployment, so
+          installation cannot be verified. Set <code>GHIC_APP_ID</code> and{" "}
+          <code>GHIC_PRIVATE_KEY</code> to enable it.
+        </p>
+      )}
     </div>
   );
 }
