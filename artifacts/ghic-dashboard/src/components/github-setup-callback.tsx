@@ -39,21 +39,12 @@ export function GitHubSetupCallback({
     if (!params.present || started.current) return;
     started.current = true;
 
-    // `request` means the user asked an organization owner to approve the
-    // installation. Nothing is installed yet and there is no installation
-    // id to verify, so recording a connection would be a lie.
-    if (params.setupAction === 'request' || !params.installationId) {
-      clearSetupParams();
-      setResult({ ok: true, setupAction: params.setupAction ?? 'request' });
-      setDone(true);
-      return;
-    }
-
     clearSetupParams();
     complete
       .mutateAsync({
         installationId: params.installationId,
         setupAction: params.setupAction,
+        state: params.state,
       })
       .then(setResult)
       .catch((caught: unknown) => {
@@ -89,8 +80,7 @@ export function GitHubSetupCallback({
         action={
           <button
             onClick={() => {
-              setError(null);
-              setDone(true);
+              window.location.assign('/repositories');
             }}
             className="w-full bg-primary text-primary-foreground px-5 py-3 font-display tracking-widest uppercase text-xs font-bold hover:bg-primary/90"
           >
@@ -102,31 +92,38 @@ export function GitHubSetupCallback({
   }
 
   const pending = result?.setupAction === 'request';
+  const cancelled = result?.cancelled === true;
   return (
     <Panel
       icon={
-        pending ? (
+        pending || cancelled ? (
           <Github className="w-4 h-4" />
         ) : (
           <CheckCircle2 className="w-4 h-4" />
         )
       }
-      title={pending ? 'Approval requested' : 'GitHub connected'}
+      title={
+        pending
+          ? 'Approval requested'
+          : cancelled
+            ? 'GitHub connection cancelled'
+            : 'GitHub connected'
+      }
       body={
         pending
           ? 'An organization owner has to approve the GHIC installation. Repositories appear here once they do.'
-          : `${result?.repositoryCount ?? 0} repositor${
-              result?.repositoryCount === 1 ? 'y' : 'ies'
-            } connected${
-              result?.accountLogin ? ` from ${result.accountLogin}` : ''
-            }. Indexing status appears as GHIC processes them.`
+          : cancelled
+            ? 'No GitHub installation was connected. You can retry whenever you are ready.'
+            : `${result?.repositoryCount ?? 0} repositor${
+                result?.repositoryCount === 1 ? 'y' : 'ies'
+              } connected${
+                result?.accountLogin ? ` from ${result.accountLogin}` : ''
+              }. Indexing status appears as GHIC processes them.`
       }
       action={
         <button
           onClick={() => {
-            setResult(null);
-            setDone(true);
-            window.history.replaceState({}, '', '/repositories');
+            window.location.assign('/repositories');
           }}
           className="w-full bg-primary text-primary-foreground px-5 py-3 font-display tracking-widest uppercase text-xs font-bold hover:bg-primary/90"
         >

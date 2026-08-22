@@ -8,9 +8,11 @@ import { Link } from "wouter";
 
 import { DataError } from "@/components/data-state";
 import { PageContent, PageHeader, StatusBadge } from "@/components/ui/swiss";
-import { useDashboardDate } from "@/lib/account";
+import { useCurrentAccount, useDashboardDate } from "@/lib/account";
 import {
   useGitHubConnection,
+  useCreateInstallationIntent,
+  useDisconnectInstallation,
   useRefreshInstallation,
 } from "@/lib/github-connection";
 
@@ -26,14 +28,22 @@ export default function Repositories() {
     query: { queryKey: getListRepositoriesQueryKey(params) },
   });
   const formatDate = useDashboardDate();
+  const account = useCurrentAccount();
+  const canManageGitHub = ["owner", "admin"].includes(account.data?.role || "");
   const connection = useGitHubConnection();
   const refresh = useRefreshInstallation();
+  const disconnect = useDisconnectInstallation();
+  const createIntent = useCreateInstallationIntent();
+
+  const startGitHubInstall = async () => {
+    const intent = await createIntent.mutateAsync();
+    window.location.assign(intent.installUrl);
+  };
 
   const installations = connection.data?.installations ?? [];
-  const installUrl = connection.data?.installUrl;
   const nothingConnected =
     connection.isSuccess &&
-    installations.length === 0 &&
+    installations.every((installation) => installation.status !== "connected") &&
     !query.isLoading &&
     (query.data?.items.length ?? 0) === 0;
 
@@ -46,17 +56,24 @@ export default function Repositories() {
       <PageContent className="flex flex-col gap-4">
         <GitHubConnectionBar
           configured={connection.data?.configured ?? false}
+          canManage={canManageGitHub}
           installations={installations}
-          installUrl={installUrl}
+          onConnect={() => void startGitHubInstall()}
           onRefresh={(id) => refresh.mutate(id)}
+          onDisconnect={(id) => disconnect.mutate(id)}
           refreshing={refresh.isPending}
-          refreshError={refresh.error?.message ?? null}
+          disconnecting={disconnect.isPending}
+          refreshError={refresh.error?.message ?? disconnect.error?.message ?? createIntent.error?.message ?? null}
+          connecting={createIntent.isPending}
         />
 
         {nothingConnected ? (
           <ConnectEmptyState
             configured={connection.data?.configured ?? false}
-            installUrl={installUrl}
+            canManage={canManageGitHub}
+            onConnect={() => void startGitHubInstall()}
+            connecting={createIntent.isPending}
+            error={createIntent.error?.message ?? null}
           />
         ) : null}
 
@@ -135,10 +152,15 @@ export default function Repositories() {
                       </td>
                       <td className="px-4 py-3">
                         <StatusBadge
-                          status={repository.connected ? "success" : "neutral"}
-                          text={
-                            repository.connected ? "connected" : "no app access"
+                          status={
+                            repository.githubAccessStatus === "connected"
+                              ? "success"
+                              : repository.githubAccessStatus === "removed" ||
+                                  repository.githubAccessStatus === "unauthorized"
+                                ? "neutral"
+                                : "danger"
                           }
+                          text={repository.githubAccessStatus || "unauthorized"}
                         />
                       </td>
                       <td className="px-4 py-3">
@@ -203,31 +225,40 @@ export default function Repositories() {
 /**
  * Where an installation is chosen.
  *
- * The link goes to GitHub's own installation page, which is the only place
+ * The action opens GitHub's own installation page, which is the only place
  * repository access can be granted. Nothing here asks the user to type an
  * owner or repository name: the selection they make on GitHub is what GHIC
  * reads back, so the two can never disagree.
  */
 function GitHubConnectionBar({
   configured,
+  canManage,
   installations,
-  installUrl,
+  onConnect,
   onRefresh,
+  onDisconnect,
   refreshing,
+  disconnecting,
   refreshError,
+  connecting,
 }: {
   configured: boolean;
+  canManage: boolean;
   installations: Array<{
     installationId: number;
     accountLogin: string;
     accountType: string;
     repositorySelection: string | null;
     repositoryCount: number;
+    status: string;
   }>;
-  installUrl?: string;
+  onConnect: () => void;
   onRefresh: (installationId: number) => void;
+  onDisconnect: (installationId: number) => void;
   refreshing: boolean;
+  disconnecting: boolean;
   refreshError: string | null;
+  connecting: boolean;
 }) {
   if (!installations.length) return null;
 
@@ -237,13 +268,14 @@ function GitHubConnectionBar({
         <span className="flex items-center gap-2 text-[10px] font-display tracking-widest uppercase font-bold text-muted-foreground">
           <Github className="w-3.5 h-3.5" /> GitHub App
         </span>
-        {configured && installUrl ? (
-          <a
-            href={installUrl}
+        {configured && canManage ? (
+          <button
+            onClick={onConnect}
+            disabled={connecting}
             className="text-[10px] font-display tracking-widest uppercase font-bold underline hover:text-primary"
           >
-            Manage repository access on GitHub
-          </a>
+            {connecting ? "Opening GitHub..." : "Manage repository access on GitHub"}
+          </button>
         ) : null}
       </div>
       <div className="flex flex-col gap-2">
@@ -263,16 +295,41 @@ function GitHubConnectionBar({
                   : " · selected repositories"}
               </span>
             </span>
-            <button
-              onClick={() => onRefresh(installation.installationId)}
-              disabled={refreshing}
-              className="flex items-center gap-2 border border-border px-3 py-1.5 text-[10px] font-display tracking-widest uppercase font-bold hover:bg-muted disabled:opacity-40"
-            >
-              <RefreshCw
-                className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`}
+            <div className="flex items-center gap-2">
+              <StatusBadge
+                status={installation.status === "connected" ? "success" : "danger"}
+                text={installation.status}
               />
-              Re-sync
-            </button>
+              {canManage ? (
+                <button
+                  onClick={() => onRefresh(installation.installationId)}
+                  disabled={refreshing || disconnecting || installation.status === "disconnected"}
+                  className="flex items-center gap-2 border border-border px-3 py-1.5 text-[10px] font-display tracking-widest uppercase font-bold hover:bg-muted disabled:opacity-40"
+                >
+                  <RefreshCw
+                    className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`}
+                  />
+                  Re-sync
+                </button>
+              ) : null}
+              {canManage && installation.status === "connected" ? (
+                <button
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "Disconnect GHIC from this installation? GitHub authorization will remain unchanged.",
+                      )
+                    ) {
+                      onDisconnect(installation.installationId);
+                    }
+                  }}
+                  disabled={refreshing || disconnecting}
+                  className="border border-border px-3 py-1.5 text-[10px] font-display tracking-widest uppercase font-bold hover:bg-muted disabled:opacity-40"
+                >
+                  Disconnect
+                </button>
+              ) : null}
+            </div>
           </div>
         ))}
       </div>
@@ -285,10 +342,16 @@ function GitHubConnectionBar({
 
 function ConnectEmptyState({
   configured,
-  installUrl,
+  canManage,
+  onConnect,
+  connecting,
+  error,
 }: {
   configured: boolean;
-  installUrl?: string;
+  canManage: boolean;
+  onConnect: () => void;
+  connecting: boolean;
+  error: string | null;
 }) {
   return (
     <div className="border border-border bg-card p-8 flex flex-col items-start gap-4">
@@ -303,13 +366,18 @@ function ConnectEmptyState({
         GHIC records the selection you make on GitHub — there is nothing to type
         here.
       </p>
-      {configured && installUrl ? (
-        <a
-          href={installUrl}
+      {configured && canManage ? (
+        <button
+          onClick={onConnect}
+          disabled={connecting}
           className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-3 font-display tracking-widest uppercase text-xs font-bold hover:bg-primary/90"
         >
-          <Github className="w-4 h-4" /> Install GHIC on GitHub
-        </a>
+          <Github className="w-4 h-4" /> {connecting ? "Opening GitHub..." : "Install GHIC on GitHub"}
+        </button>
+      ) : configured ? (
+        <p className="text-xs text-muted-foreground border border-border bg-muted/30 p-3 max-w-prose">
+          Ask a workspace admin or owner to connect the GitHub App.
+        </p>
       ) : (
         <p className="text-xs text-muted-foreground border border-border bg-muted/30 p-3 max-w-prose">
           The GitHub App credentials are not configured on this deployment, so
@@ -317,6 +385,7 @@ function ConnectEmptyState({
           <code>GHIC_PRIVATE_KEY</code> to enable it.
         </p>
       )}
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
   );
 }

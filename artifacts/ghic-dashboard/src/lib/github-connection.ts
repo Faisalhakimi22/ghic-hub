@@ -18,6 +18,9 @@ export interface ConnectedInstallation {
   repositorySelection: string | null;
   repositoryCount: number;
   connectedAt: string | null;
+  status: 'connected' | 'disconnected' | 'revoked' | 'suspended' | string;
+  statusReason?: string | null;
+  statusChangedAt?: string | null;
 }
 
 export interface GitHubConnection {
@@ -36,12 +39,27 @@ export interface InstallationResult {
   setupAction?: string;
 }
 
+export interface InstallationIntent {
+  ok: boolean;
+  installUrl: string;
+  expiresAt: string;
+}
+
 export const githubConnectionKey = ['github', 'connection'] as const;
 
 export function useGitHubConnection() {
   return useQuery<GitHubConnection>({
     queryKey: githubConnectionKey,
     queryFn: () => customFetch<GitHubConnection>('/api/github/connection'),
+  });
+}
+
+export function useCreateInstallationIntent() {
+  return useMutation<InstallationIntent, Error, void>({
+    mutationFn: () =>
+      customFetch<InstallationIntent>('/api/github/installations/intent', {
+        method: 'POST',
+      }),
   });
 }
 
@@ -58,10 +76,12 @@ export function readSetupParams(search: string = window.location.search) {
   const params = new URLSearchParams(search);
   const installationId = params.get('installation_id');
   const setupAction = params.get('setup_action');
+  const state = params.get('state');
   return {
-    present: Boolean(installationId || setupAction),
+    present: Boolean(installationId || setupAction || state),
     installationId,
     setupAction,
+    state,
     fromSetup: params.get('source') === 'github_app_setup',
   };
 }
@@ -80,7 +100,7 @@ export function useCompleteInstallation() {
   return useMutation<
     InstallationResult,
     Error,
-    { installationId: string | number | null; setupAction: string | null }
+    { installationId: string | number | null; setupAction: string | null; state: string | null }
   >({
     mutationFn: (input) =>
       customFetch<InstallationResult>('/api/github/installations', {
@@ -88,6 +108,7 @@ export function useCompleteInstallation() {
         body: JSON.stringify({
           installationId: input.installationId,
           setupAction: input.setupAction,
+          state: input.state,
         }),
       }),
     onSuccess: () => {
@@ -103,6 +124,21 @@ export function useRefreshInstallation() {
     mutationFn: (installationId) =>
       customFetch<InstallationResult>(
         `/api/github/installations/${installationId}/refresh`,
+        { method: 'POST' },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: githubConnectionKey });
+      void queryClient.invalidateQueries({ queryKey: ['listRepositories'] });
+    },
+  });
+}
+
+export function useDisconnectInstallation() {
+  const queryClient = useQueryClient();
+  return useMutation<InstallationResult, Error, number>({
+    mutationFn: (installationId) =>
+      customFetch<InstallationResult>(
+        `/api/github/installations/${installationId}/disconnect`,
         { method: 'POST' },
       ),
     onSuccess: () => {

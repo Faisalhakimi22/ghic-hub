@@ -15,6 +15,18 @@ function request(path, { method = "GET", body, role = "viewer" } = {}) {
   };
 }
 
+function requestWithQuery(path, query, options = {}) {
+  const params = new URLSearchParams({ path, ...query });
+  return {
+    url: `https://hub.example/api/index?${params.toString()}`,
+    method: options.method || "GET",
+    headers: {},
+    body: options.body,
+    role: options.role || "viewer",
+    async *[Symbol.asyncIterator]() {},
+  };
+}
+
 function response() {
   return {
     statusCode: null,
@@ -41,6 +53,9 @@ function dependencies(overrides = {}) {
     authenticateUser: async (claims) => ({
       id: claims.uid,
       role: claims.name,
+      workspaceId: "workspace-a",
+      workspaceName: "Workspace A",
+      workspaceRole: claims.name,
       settings: { notificationPreferences: { criticalAlerts: true } },
     }),
     getOrgSettings: async () => ({ workspaceName: "GHIC", updatedAt: null }),
@@ -71,6 +86,11 @@ function dependencies(overrides = {}) {
       installUrl: "https://github.com/apps/ghic/installations/new",
       installations: [],
     }),
+    createGitHubInstallationIntent: async () => ({
+      ok: true,
+      installUrl: "https://github.com/apps/ghic/installations/new?state=test",
+      expiresAt: "2026-08-10T00:10:00.000Z",
+    }),
     completeGitHubInstallation: async (viewer, input) => ({
       ok: true,
       installationId: Number(input.installationId),
@@ -81,6 +101,11 @@ function dependencies(overrides = {}) {
     refreshGitHubInstallation: async (viewer, id) => ({
       ok: true,
       installationId: Number(id),
+    }),
+    disconnectGitHubInstallation: async (viewer, id) => ({
+      ok: true,
+      installationId: Number(id),
+      disconnected: true,
     }),
     ...overrides,
   };
@@ -120,6 +145,102 @@ test("valid Firebase identity without workspace membership receives 403", async 
   );
   const res = response();
   await handler(request("me"), res);
+  assert.equal(res.statusCode, 403);
+  assert.equal(res.body.code, "workspace_access_denied");
+});
+
+test("issues are scoped to the authenticated workspace, not a query parameter", async () => {
+  let received;
+  const handler = createHandler(
+    dependencies({
+      authenticateUser: async (claims) => ({
+        id: claims.uid,
+        role: "member",
+        workspaceId: "workspace-a",
+        settings: {},
+      }),
+      readIssues: async (params) => {
+        received = params;
+        return {
+          items: [{ id: "acme/repo~1", repositoryName: "acme/repo", number: 1 }],
+          total: 1,
+          page: 1,
+          limit: 50,
+        };
+      },
+    }),
+  );
+  const res = response();
+  await handler(
+    requestWithQuery("issues", {
+      workspaceId: "workspace-b",
+      workspace_id: "workspace-b",
+      repository: "other/repo",
+      number: "99",
+    }),
+    res,
+  );
+  assert.equal(res.statusCode, 200);
+  assert.equal(received.workspaceId, "workspace-a");
+  assert.equal(received.workspace_id, "workspace-b");
+  assert.equal(received.repository, "other/repo");
+});
+
+test("issue detail keeps the authenticated workspace when repository and number are changed", async () => {
+  let received;
+  const handler = createHandler(
+    dependencies({
+      authenticateUser: async (claims) => ({
+        id: claims.uid,
+        role: "member",
+        workspaceId: "workspace-a",
+        settings: {},
+      }),
+      readIssues: async (params) => {
+        received = params;
+        return { items: [], total: 0, page: 1, limit: 100 };
+      },
+    }),
+  );
+  const res = response();
+  await handler(request("issues/other-repo~999"), res);
+  assert.equal(res.statusCode, 404);
+  assert.equal(received.workspaceId, "workspace-a");
+  assert.equal(received.repositoryId, "other-repo");
+});
+
+test("unauthenticated issue reads fail before the issue query runs", async () => {
+  let read = false;
+  const handler = createHandler(
+    dependencies({
+      verifyRequest: async () => {
+        throw new AuthError("Missing bearer token.");
+      },
+      readIssues: async () => {
+        read = true;
+        return { items: [], total: 0, page: 1, limit: 50 };
+      },
+    }),
+  );
+  const res = response();
+  await handler(request("issues"), res);
+  assert.equal(res.statusCode, 401);
+  assert.equal(read, false);
+});
+
+test("a non-member cannot read issues", async () => {
+  const handler = createHandler(
+    dependencies({
+      authenticateUser: async () => {
+        throw Object.assign(new Error("This account is not a member."), {
+          status: 403,
+          code: "workspace_access_denied",
+        });
+      },
+    }),
+  );
+  const res = response();
+  await handler(request("issues"), res);
   assert.equal(res.statusCode, 403);
   assert.equal(res.body.code, "workspace_access_denied");
 });
@@ -305,6 +426,27 @@ test("the GitHub connection summary requires authentication", async () => {
   assert.equal(reached, false);
 });
 
+test("creating an installation intent requires authentication and returns a stateful URL", async () => {
+  let reached = false;
+  const handler = createHandler(
+    dependencies({
+      createGitHubInstallationIntent: async (viewer) => {
+        reached = viewer.id === "uid-owner";
+        return {
+          ok: true,
+          installUrl: "https://github.com/apps/ghic/installations/new?state=test",
+          expiresAt: "2026-08-10T00:10:00.000Z",
+        };
+      },
+    }),
+  );
+  const res = response();
+  await handler(request("github/installations/intent", { method: "POST", role: "owner" }), res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(reached, true);
+  assert.match(res.body.installUrl, /[?&]state=/);
+});
+
 test("completing an installation requires authentication", async () => {
   let reached = false;
   const handler = createHandler(
@@ -345,7 +487,7 @@ test("an authenticated installation callback reaches the verifier with the viewe
     request("github/installations", {
       method: "POST",
       role: "owner",
-      body: { installationId: 99, setupAction: "install" },
+      body: { installationId: 99, setupAction: "install", state: "callback-state" },
     }),
     res,
   );
@@ -354,6 +496,7 @@ test("an authenticated installation callback reaches the verifier with the viewe
   // The viewer comes from the verified token, never from the request body.
   assert.equal(seen.viewer.id, "uid-owner");
   assert.equal(seen.input.installationId, 99);
+  assert.equal(seen.input.state, "callback-state");
 });
 
 test("a cancelled installation is not an error", async () => {
@@ -521,6 +664,17 @@ test("re-syncing a connected installation reaches the refresh path", async () =>
   );
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.installationId, 5);
+});
+
+test("disconnecting an installation reaches the GHIC claim removal path", async () => {
+  const handler = createHandler(dependencies());
+  const res = response();
+  await handler(
+    request("github/installations/5/disconnect", { method: "POST" }),
+    res,
+  );
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.disconnected, true);
 });
 
 test("the GitHub connection routes reject methods they do not define", async () => {

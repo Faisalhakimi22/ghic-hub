@@ -116,9 +116,10 @@ export function hasRole(role, required) {
 }
 
 export function requireRole(user, required) {
-  if (!hasRole(user.role, required)) {
+  const role = user.workspaceRole || user.role;
+  if (!hasRole(role, required)) {
     throw new AuthError(
-      `This action requires the ${required} role; your role is ${user.role}.`,
+      `This action requires the ${required} role; your role is ${role}.`,
       403,
     );
   }
@@ -129,13 +130,15 @@ export function requireRoleChange(actor, target, nextRole) {
   if (!ROLES.includes(nextRole)) {
     throw new AuthError("Unknown role.", 400);
   }
-  if (actor.role === "owner") return;
-  if (actor.role !== "admin") {
+  const actorRole = actor.workspaceRole || actor.role;
+  const targetRole = target.workspaceRole || target.role;
+  if (actorRole === "owner") return;
+  if (actorRole !== "admin") {
     throw new AuthError("This action requires the admin or owner role.", 403);
   }
   if (
-    target.role === "owner" ||
-    target.role === "admin" ||
+    targetRole === "owner" ||
+    targetRole === "admin" ||
     nextRole === "owner" ||
     nextRole === "admin"
   ) {

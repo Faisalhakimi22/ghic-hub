@@ -210,8 +210,23 @@ test("the repository query lists connected repositories even with no index state
   // repository selected during installation has no ghic_repository_state
   // row until something indexes it, and it still has to appear.
   assert.match(sql, /SELECT repo FROM connected\s+UNION\s+SELECT repo FROM repository_state/);
-  assert.match(sql, /FROM ghic_github_repositories WHERE active = true/);
+  assert.match(sql, /FROM ghic_github_repositories r/);
+  assert.match(sql, /CASE\s+WHEN connected\.repo IS NULL THEN 'unauthorized'/);
   assert.match(sql, /COALESCE\(repository_state\.state, 'not_indexed'\) AS state/);
+});
+
+test("repository status fails closed when the workspace-qualified installation join is absent", () => {
+  const sql = buildRepositoryQuery({
+    githubRepositories: true,
+    githubInstallations: true,
+    repositoryState: true,
+    repoChunks: true,
+    ledger: true,
+  });
+  assert.match(sql, /i\.installation_id IS NULL THEN 'unauthorized'/);
+  assert.match(sql, /ELSE 'unauthorized' END/);
+  assert.match(sql, /installation_status <> 'connected' THEN 'unauthorized'/);
+  assert.doesNotMatch(sql, /NULLIF\(i\.connection_status, ''\), 'connected'/);
 });
 
 test("the repository query degrades to stub CTEs when a table is absent", () => {

@@ -23,7 +23,9 @@ import {
 } from "./_lib/db.mjs";
 import {
   completeGitHubInstallation,
+  disconnectGitHubInstallation,
   getGitHubConnectionSummary,
+  createGitHubInstallationIntent,
   refreshGitHubInstallation,
 } from "./_lib/github-installations.mjs";
 import {
@@ -261,7 +263,9 @@ const productionDependencies = {
   readDuplicateCandidates,
   searchProductData,
   getGitHubConnectionSummary,
+  createGitHubInstallationIntent,
   completeGitHubInstallation,
+  disconnectGitHubInstallation,
   refreshGitHubInstallation,
 };
 
@@ -271,10 +275,10 @@ export function createHandler(overrides = {}) {
   async function overview(viewer) {
     const [repositoryResponse, aggregate, eventRows, issueResponse, runtime] =
       await Promise.all([
-        dependencies.readRepositories({ limit: 100 }),
-        dependencies.readAggregate(),
-        dependencies.readLedgerEvents(200),
-        dependencies.readIssues({ limit: 100 }),
+        dependencies.readRepositories({ limit: 100, workspaceId: viewer.workspaceId }),
+        dependencies.readAggregate(viewer.workspaceId),
+        dependencies.readLedgerEvents(200, viewer.workspaceId),
+        dependencies.readIssues({ limit: 100, workspaceId: viewer.workspaceId }),
         dependencies.runtimeHealth(),
       ]);
     const result = buildDashboardOverview({
@@ -291,14 +295,17 @@ export function createHandler(overrides = {}) {
     return result;
   }
 
-  async function organizationView(settings = null) {
+  async function organizationView(settings = null, viewer = null) {
+    if (!viewer?.workspaceId) {
+      throw new AuthError("Workspace membership is required.", 403);
+    }
     const [resolvedSettings, members, repositories] = await Promise.all([
-      settings ? Promise.resolve(settings) : dependencies.getOrgSettings(),
-      dependencies.listUsers(),
-      dependencies.readRepositories({ limit: 100 }),
+      settings ? Promise.resolve(settings) : dependencies.getOrgSettings(viewer?.workspaceId),
+      dependencies.listUsers(viewer?.workspaceId),
+      dependencies.readRepositories({ limit: 100, workspaceId: viewer?.workspaceId }),
     ]);
     return {
-      id: "ghic-workspace",
+      id: viewer.workspaceId,
       name: resolvedSettings.workspaceName,
       workspaceName: resolvedSettings.workspaceName,
       slug: String(resolvedSettings.workspaceName)
@@ -351,7 +358,7 @@ export function createHandler(overrides = {}) {
         return;
       }
       if (path === "organization" && req.method === "GET") {
-        res.status(200).json(await organizationView());
+        res.status(200).json(await organizationView(null, viewer));
         return;
       }
       if (path === "organization" && ["PATCH", "PUT"].includes(req.method)) {
@@ -365,14 +372,13 @@ export function createHandler(overrides = {}) {
             status: 400,
           });
         const settings = await dependencies.updateOrgSettings(
-          { workspaceName },
-          viewer.id,
+          { workspaceName }, viewer.id, viewer.workspaceId,
         );
-        res.status(200).json(await organizationView(settings));
+        res.status(200).json(await organizationView(settings, viewer));
         return;
       }
       if (path === "organization/members" && req.method === "GET") {
-        const members = await dependencies.listUsers();
+        const members = await dependencies.listUsers(viewer.workspaceId);
         const items = members.map((member) => ({
           id: member.id,
           login: member.name || member.email || member.id,
@@ -398,16 +404,14 @@ export function createHandler(overrides = {}) {
         segments[2] &&
         ["PATCH", "PUT"].includes(req.method)
       ) {
-        const target = await dependencies.getUser(
-          decodeURIComponent(segments[2]),
-        );
+        const target = await dependencies.getUser(decodeURIComponent(segments[2]), viewer.workspaceId);
         if (!target)
           throw Object.assign(new Error("User not found."), { status: 404 });
         const { role } = await readJson(req);
         requireRoleChange(viewer, target, role);
         res
           .status(200)
-          .json(await dependencies.updateUserRole(target.id, role));
+          .json(await dependencies.updateUserRole(target.id, role, viewer.workspaceId));
         return;
       }
 
@@ -415,19 +419,37 @@ export function createHandler(overrides = {}) {
       // and organization administration, so they sit above the read-only
       // guard below.
       if (path === "github/connection" && req.method === "GET") {
-        res.status(200).json(await dependencies.getGitHubConnectionSummary());
+        res.status(200).json(await dependencies.getGitHubConnectionSummary(viewer.workspaceId));
+        return;
+      }
+      if (path === "github/installations/intent" && req.method === "POST") {
+        res
+          .status(200)
+          .json(await dependencies.createGitHubInstallationIntent(viewer));
         return;
       }
       if (path === "github/installations" && req.method === "POST") {
-        // The browser supplies only an installation id. It is a claim, not a
-        // credential: completeGitHubInstallation re-reads the installation
-        // from GitHub with the App's own JWT and refuses it unless this
-        // viewer's GitHub identity owns or administers the account it
-        // belongs to.
+        // The browser supplies the callback state and installation id. The
+        // server consumes the state once, then independently verifies the
+        // installation and repository list with GitHub App credentials.
         const payload = await readJson(req);
         res
           .status(200)
           .json(await dependencies.completeGitHubInstallation(viewer, payload));
+        return;
+      }
+      if (
+        segments[0] === "github" &&
+        segments[1] === "installations" &&
+        segments[2] &&
+        segments[3] === "disconnect" &&
+        req.method === "POST"
+      ) {
+        res
+          .status(200)
+          .json(
+            await dependencies.disconnectGitHubInstallation(viewer, segments[2]),
+          );
         return;
       }
       if (
@@ -462,6 +484,7 @@ export function createHandler(overrides = {}) {
         body = (await overview(viewer)).alerts;
       } else if (path === "repositories") {
         body = await dependencies.readRepositories({
+          workspaceId: viewer.workspaceId,
           page: url.searchParams.get("page"),
           limit: url.searchParams.get("limit"),
           search: url.searchParams.get("search"),
@@ -475,6 +498,7 @@ export function createHandler(overrides = {}) {
       ) {
         const fullName = repositoryFromId(segments[1]);
         const response = await dependencies.readRepositories({
+          workspaceId: viewer.workspaceId,
           search: fullName,
           limit: 100,
         });
@@ -491,7 +515,12 @@ export function createHandler(overrides = {}) {
         );
       } else if (path === "issues") {
         body = await dependencies.readIssues(
-          Object.fromEntries(url.searchParams),
+          {
+            ...Object.fromEntries(url.searchParams),
+            // Query parameters are filters only. Tenant scope comes from the
+            // authenticated Firebase user and server-side membership.
+            workspaceId: viewer.workspaceId,
+          },
         );
       } else if (segments[0] === "issues" && segments[1]) {
         const separator = segments[1].lastIndexOf("~");
@@ -508,6 +537,7 @@ export function createHandler(overrides = {}) {
         }
         const repo = repositoryFromId(repoPart);
         const response = await dependencies.readIssues({
+          workspaceId: viewer.workspaceId,
           repositoryId: repositoryIdForQuery(repo),
           limit: 100,
         });
@@ -521,15 +551,15 @@ export function createHandler(overrides = {}) {
           throw Object.assign(new Error("Issue not found."), { status: 404 });
         body = issueDetail(issue);
       } else if (path === "analytics/overview") {
-        body = await dependencies.readAnalytics();
+        body = await dependencies.readAnalytics(viewer.workspaceId);
       } else if (path === "duplicates") {
-        body = await dependencies.readDuplicateCandidates();
+        body = await dependencies.readDuplicateCandidates(viewer.workspaceId);
       } else if (path === "search") {
         body = await dependencies.searchProductData(
-          url.searchParams.get("q") || "",
+          url.searchParams.get("q") || "", 20, viewer.workspaceId,
         );
       } else if (path === "audit-logs") {
-        const rows = await dependencies.readLedgerEvents(100);
+        const rows = await dependencies.readLedgerEvents(100, viewer.workspaceId);
         const items = rows
           .map((row) => {
             const activity = activityFromLedgerRow(row);
@@ -563,8 +593,8 @@ export function createHandler(overrides = {}) {
       } else if (path === "system-health" || path === "healthz") {
         const [runtime, repositories, aggregate] = await Promise.all([
           dependencies.runtimeHealth(),
-          dependencies.readRepositories({ limit: 100 }),
-          dependencies.readAggregate(),
+          dependencies.readRepositories({ limit: 100, workspaceId: viewer.workspaceId }),
+          dependencies.readAggregate(viewer.workspaceId),
         ]);
         const ri = runtime.repository_intelligence || {};
         const signaturesMatch = repositories.items.every(

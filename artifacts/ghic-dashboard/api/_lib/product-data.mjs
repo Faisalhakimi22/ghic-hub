@@ -4,6 +4,7 @@ const LEDGER_TYPES = new Set([
   "prediction",
   "analysis",
   "processing_failure",
+  "authorization_skip",
   "action",
   "label_event",
   "outcome",
@@ -56,12 +57,14 @@ export async function sourceCapabilities() {
       to_regclass('public.ghic_ledger') IS NOT NULL AS ledger,
       to_regclass('public.ghic_repository_state') IS NOT NULL AS repository_state,
       to_regclass('public.ghic_repo_chunks') IS NOT NULL AS repo_chunks,
-      to_regclass('public.ghic_github_repositories') IS NOT NULL AS github_repositories`;
+      to_regclass('public.ghic_github_repositories') IS NOT NULL AS github_repositories,
+      to_regclass('public.ghic_github_installations') IS NOT NULL AS github_installations`;
   return {
     ledger: Boolean(row?.ledger),
     repositoryState: Boolean(row?.repository_state),
     repoChunks: Boolean(row?.repo_chunks),
     githubRepositories: Boolean(row?.github_repositories),
+    githubInstallations: Boolean(row?.github_installations),
   };
 }
 
@@ -81,22 +84,40 @@ export function buildRepositoryQuery(capabilities) {
   // not_indexed state -- rather than being invisible until an index run
   // creates a ghic_repository_state row. The union keeps repositories that
   // GHIC indexed before installation metadata was persisted.
+  const installationStatus = capabilities.githubInstallations
+    ? `CASE WHEN i.installation_id IS NULL THEN 'unauthorized'
+         WHEN i.revoked_at IS NOT NULL THEN 'revoked'
+         WHEN i.connection_status IN ('connected','disconnected','revoked','suspended')
+           THEN i.connection_status
+         ELSE 'unauthorized' END`
+    : `'unauthorized'`;
+  const installationJoin = capabilities.githubInstallations
+    ? `LEFT JOIN ghic_github_installations i
+         ON i.installation_id = r.installation_id
+        AND i.workspace_id = r.workspace_id`
+    : "";
   const connected = capabilities.githubRepositories
     ? `connected AS (
-         SELECT repo_full_name AS repo, private, html_url, default_branch,
-                installation_id, connected_at
-         FROM ghic_github_repositories WHERE active = true
+         SELECT r.repo_full_name AS repo, r.private, r.html_url, r.default_branch,
+                r.installation_id, r.connected_at, r.active,
+                ${installationStatus} AS installation_status
+         FROM ghic_github_repositories r
+         ${installationJoin}
+         WHERE r.workspace_id = $6
        )`
     : `connected AS (
          SELECT NULL::text AS repo, NULL::boolean AS private,
                 NULL::text AS html_url, NULL::text AS default_branch,
                 NULL::bigint AS installation_id,
-                NULL::timestamptz AS connected_at
+                NULL::timestamptz AS connected_at,
+                false AS active,
+                'unauthorized'::text AS installation_status
          WHERE false
        )`;
   const stateSource = capabilities.repositoryState
     ? `repository_state AS (
          SELECT repo, state, data, updated_at FROM ghic_repository_state
+         WHERE workspace_id = $6
        )`
     : `repository_state AS (
          SELECT NULL::text AS repo, NULL::text AS state, NULL::jsonb AS data,
@@ -107,7 +128,7 @@ export function buildRepositoryQuery(capabilities) {
     ? `chunk_counts AS (
          SELECT repo, count(*)::int AS actual_chunk_count,
                 count(DISTINCT path)::int AS actual_file_count
-         FROM ghic_repo_chunks GROUP BY repo
+         FROM ghic_repo_chunks WHERE workspace_id = $6 GROUP BY repo
        )`
     : `chunk_counts AS (
          SELECT NULL::text AS repo, NULL::int AS actual_chunk_count,
@@ -121,7 +142,7 @@ export function buildRepositoryQuery(capabilities) {
                 data->>'repository_url' AS repository_url,
                 data->>'installation_id' AS installation_id
          FROM ghic_ledger
-         WHERE data->>'type' = 'analysis' AND COALESCE(data->>'repo', '') <> ''
+         WHERE workspace_id = $6 AND data->>'type' = 'analysis' AND COALESCE(data->>'repo', '') <> ''
          ORDER BY data->>'repo', id DESC
        )`
     : `latest_analyses AS (
@@ -154,11 +175,22 @@ export function buildRepositoryQuery(capabilities) {
               AS installation_id,
             connected.default_branch AS connected_default_branch,
             connected.connected_at,
-            (connected.repo IS NOT NULL) AS connected,
+            CASE
+              WHEN connected.repo IS NULL THEN 'unauthorized'
+              WHEN connected.installation_status IN ('revoked', 'suspended', 'disconnected')
+                THEN connected.installation_status
+              WHEN connected.installation_status <> 'connected' THEN 'unauthorized'
+              WHEN connected.active THEN 'connected'
+              ELSE 'removed'
+            END AS access_status,
+            (connected.repo IS NOT NULL AND connected.active
+              AND connected.installation_status = 'connected') AS connected,
             count(*) OVER ()::int AS total_count,
             count(*) FILTER (WHERE repository_state.state = 'ready')
               OVER ()::int AS indexed_count,
-            count(*) FILTER (WHERE connected.repo IS NOT NULL)
+            count(*) FILTER (WHERE connected.repo IS NOT NULL
+              AND connected.active
+              AND connected.installation_status = 'connected')
               OVER ()::int AS connected_count
      FROM all_repos
      LEFT JOIN connected USING (repo)
@@ -185,7 +217,12 @@ export async function readRepositories({
   search = "",
   language = "",
   status = "",
+  workspaceId = "",
 } = {}) {
+  if (!workspaceId) {
+    return { items: [], total: 0, indexedTotal: 0, connectedTotal: 0,
+      ...pagination(page, limit), available: false };
+  }
   const q = await database();
   const capabilities = await sourceCapabilities();
   const paging = pagination(page, limit);
@@ -206,6 +243,7 @@ export async function readRepositories({
     String(status || ""),
     paging.limit,
     paging.offset,
+    String(workspaceId || ""),
   ]);
   const items = rows.map(normalizeRepositoryRow);
   const total = rows.length ? asNumber(rows[0].total_count, 0) : 0;
@@ -295,6 +333,9 @@ export function normalizeRepositoryRow(row = {}) {
     // now. An installation_id seen only in a past analysis says GHIC once
     // had access, which is not the same claim.
     connected: row.connected === true,
+    githubAccessStatus: String(
+      row.access_status || (row.connected === true ? "connected" : "unauthorized"),
+    ),
     connectedAt: toIso(row.connected_at),
     installationStatus:
       row.connected === true
@@ -350,6 +391,7 @@ function safeRepositoryError(error) {
 }
 
 export async function readIssues(params = {}) {
+  if (!params.workspaceId) return { items: [], total: 0, ...pagination(params.page, params.limit), available: false };
   const q = await database();
   const capabilities = await sourceCapabilities();
   const paging = pagination(params.page, params.limit);
@@ -366,7 +408,7 @@ export async function readIssues(params = {}) {
               data->>'repo' AS repo, (data->>'number')::int AS number,
               data, created_at
        FROM ghic_ledger
-       WHERE data->>'type' = 'prediction'
+       WHERE workspace_id = $12 AND data->>'type' = 'prediction'
          AND data->>'number' ~ '^[0-9]+$'
        ORDER BY data->>'repo', (data->>'number')::int, id DESC
      ), analyses AS (
@@ -374,7 +416,7 @@ export async function readIssues(params = {}) {
               data->>'repo' AS repo, (data->>'number')::int AS number,
               data, created_at
        FROM ghic_ledger
-       WHERE data->>'type' = 'analysis'
+       WHERE workspace_id = $12 AND data->>'type' = 'analysis'
          AND data->>'number' ~ '^[0-9]+$'
        ORDER BY data->>'repo', (data->>'number')::int, id DESC
      ), outcomes AS (
@@ -382,14 +424,14 @@ export async function readIssues(params = {}) {
               data->>'repo' AS repo, (data->>'number')::int AS number,
               data, created_at
        FROM ghic_ledger
-       WHERE data->>'type' = 'outcome'
+       WHERE workspace_id = $12 AND data->>'type' = 'outcome'
          AND data->>'number' ~ '^[0-9]+$'
        ORDER BY data->>'repo', (data->>'number')::int, id DESC
      ), actions AS (
        SELECT data->>'repo' AS repo, (data->>'number')::int AS number,
               bool_or(data->>'action' = 'comment') AS comment_posted
        FROM ghic_ledger
-       WHERE data->>'type' = 'action'
+       WHERE workspace_id = $12 AND data->>'type' = 'action'
          AND data->>'number' ~ '^[0-9]+$'
        GROUP BY data->>'repo', (data->>'number')::int
      ), issue_keys AS (
@@ -447,6 +489,7 @@ export async function readIssues(params = {}) {
       String(params.assignee || ""),
       paging.limit,
       paging.offset,
+      String(params.workspaceId || ""),
     ],
   );
   const total = rows.length ? asNumber(rows[0].total_count, 0) : 0;
@@ -638,10 +681,10 @@ export function issueDetail(issue) {
   };
 }
 
-export async function readLedgerEvents(limit = 100) {
+export async function readLedgerEvents(limit = 100, workspaceId = "") {
   const q = await database();
   const capabilities = await sourceCapabilities();
-  if (!capabilities.ledger) return [];
+  if (!capabilities.ledger || !workspaceId) return [];
   const safeLimit = Math.min(
     500,
     Math.max(1, Math.trunc(asNumber(limit, 100))),
@@ -649,12 +692,13 @@ export async function readLedgerEvents(limit = 100) {
   return q(
     `SELECT id, data, created_at
      FROM ghic_ledger
-     WHERE data->>'type' IN (
-       'prediction', 'analysis', 'processing_failure', 'action', 'label_event', 'outcome'
+     WHERE workspace_id = $2 AND data->>'type' IN (
+        'prediction', 'analysis', 'processing_failure', 'authorization_skip',
+        'action', 'label_event', 'outcome'
      )
      ORDER BY id DESC
      LIMIT $1`,
-    [safeLimit],
+    [safeLimit, workspaceId],
   );
 }
 
@@ -729,6 +773,15 @@ export function activityFromLedgerRow(row = {}) {
         : "Label removed by a maintainer.",
     };
   }
+  if (type === "authorization_skip") {
+    return {
+      ...base,
+      type: "authorization_skipped",
+      message: `skipped ${repo}#${number}`,
+      title: "Issue processing skipped",
+      description: `GitHub App authorization was rejected: ${String(data.reason || "not authorized")}.`,
+    };
+  }
   return {
     ...base,
     type: "processing_failed",
@@ -739,25 +792,25 @@ export function activityFromLedgerRow(row = {}) {
   };
 }
 
-export async function readAggregate() {
+export async function readAggregate(workspaceId = "") {
   const q = await database();
   const capabilities = await sourceCapabilities();
-  if (!capabilities.ledger) return emptyAggregate();
+  if (!capabilities.ledger || !workspaceId) return emptyAggregate();
   const [row] = await q`
     WITH predictions AS (
       SELECT DISTINCT ON (data->>'repo', data->>'number') data, created_at
       FROM ghic_ledger
-      WHERE data->>'type' = 'prediction'
+      WHERE workspace_id = ${workspaceId} AND data->>'type' = 'prediction'
       ORDER BY data->>'repo', data->>'number', id DESC
     ), analyses AS (
       SELECT DISTINCT ON (data->>'repo', data->>'number') data, created_at
       FROM ghic_ledger
-      WHERE data->>'type' = 'analysis'
+      WHERE workspace_id = ${workspaceId} AND data->>'type' = 'analysis'
       ORDER BY data->>'repo', data->>'number', id DESC
     ), outcomes AS (
       SELECT DISTINCT ON (data->>'repo', data->>'number') data, created_at
       FROM ghic_ledger
-      WHERE data->>'type' = 'outcome'
+      WHERE workspace_id = ${workspaceId} AND data->>'type' = 'outcome'
       ORDER BY data->>'repo', data->>'number', id DESC
     )
     SELECT
@@ -779,8 +832,8 @@ export async function readAggregate() {
         WHERE o.data->>'repo' = p.data->>'repo' AND o.data->>'number' = p.data->>'number'
       ))::int AS open_issues,
       (SELECT count(*) FROM predictions WHERE COALESCE((data->>'related_count')::int, 0) > 0)::int AS duplicate_candidates,
-      (SELECT count(*) FROM ghic_ledger WHERE data->>'type' = 'action' AND data->>'action' = 'comment')::int AS comments_posted,
-      (SELECT count(*) FROM ghic_ledger WHERE data->>'type' = 'processing_failure'
+      (SELECT count(*) FROM ghic_ledger WHERE workspace_id = ${workspaceId} AND data->>'type' = 'action' AND data->>'action' = 'comment')::int AS comments_posted,
+      (SELECT count(*) FROM ghic_ledger WHERE workspace_id = ${workspaceId} AND data->>'type' = 'processing_failure'
         AND created_at >= now() - interval '24 hours')::int AS failures_last_24h`;
   return { ...emptyAggregate(), ...row };
 }
@@ -1056,10 +1109,11 @@ export function buildDashboardOverview({
   };
 }
 
-export async function readAnalytics() {
+export async function readAnalytics(workspaceId = "") {
+  if (!workspaceId) return analyticsFromRows(emptyAggregate(), [], [], [], [], []);
   const q = await database();
   const capabilities = await sourceCapabilities();
-  const aggregate = await readAggregate();
+  const aggregate = await readAggregate(workspaceId);
   if (!capabilities.ledger)
     return analyticsFromRows(aggregate, [], [], [], [], []);
 
@@ -1069,14 +1123,14 @@ export async function readAnalytics() {
       SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date,
              count(*)::int AS value
       FROM ghic_ledger
-      WHERE data->>'type' = 'analysis'
+      WHERE workspace_id = ${workspaceId} AND data->>'type' = 'analysis'
         AND data->>'analysis_status' = 'complete'
         AND created_at >= now() - interval '30 days'
       GROUP BY 1 ORDER BY 1`,
       q`
       WITH latest AS (
         SELECT DISTINCT ON (data->>'repo', data->>'number') data
-        FROM ghic_ledger WHERE data->>'type' = 'prediction'
+        FROM ghic_ledger WHERE workspace_id = ${workspaceId} AND data->>'type' = 'prediction'
         ORDER BY data->>'repo', data->>'number', id DESC
       )
       SELECT data->>'repo' AS category, count(*)::int AS count
@@ -1084,7 +1138,7 @@ export async function readAnalytics() {
       q`
       WITH latest AS (
         SELECT DISTINCT ON (data->>'repo', data->>'number') data
-        FROM ghic_ledger WHERE data->>'type' = 'analysis'
+        FROM ghic_ledger WHERE workspace_id = ${workspaceId} AND data->>'type' = 'analysis'
         ORDER BY data->>'repo', data->>'number', id DESC
       )
       SELECT data->'llm_analysis'->>'priority' AS category, count(*)::int AS count
@@ -1093,7 +1147,7 @@ export async function readAnalytics() {
       q`
       WITH latest AS (
         SELECT DISTINCT ON (data->>'repo', data->>'number') data
-        FROM ghic_ledger WHERE data->>'type' = 'analysis'
+        FROM ghic_ledger WHERE workspace_id = ${workspaceId} AND data->>'type' = 'analysis'
         ORDER BY data->>'repo', data->>'number', id DESC
       )
       SELECT data->'llm_analysis'->>'severity' AS category, count(*)::int AS count
@@ -1102,11 +1156,11 @@ export async function readAnalytics() {
       q`
       WITH latest_analysis AS (
         SELECT DISTINCT ON (data->>'repo', data->>'number') data
-        FROM ghic_ledger WHERE data->>'type' = 'analysis'
+        FROM ghic_ledger WHERE workspace_id = ${workspaceId} AND data->>'type' = 'analysis'
         ORDER BY data->>'repo', data->>'number', id DESC
       ), latest_prediction AS (
         SELECT DISTINCT ON (data->>'repo', data->>'number') data
-        FROM ghic_ledger WHERE data->>'type' = 'prediction'
+        FROM ghic_ledger WHERE workspace_id = ${workspaceId} AND data->>'type' = 'prediction'
         ORDER BY data->>'repo', data->>'number', id DESC
       )
       SELECT category, count(*)::int AS count FROM (
@@ -1171,17 +1225,17 @@ const categoryCount = (row) => ({
   count: asNumber(row.count),
 });
 
-export async function searchProductData(query, limit = 20) {
+export async function searchProductData(query, limit = 20, workspaceId = "") {
   const q = await database();
   const search = String(query || "").trim();
   const safeLimit = Math.min(50, Math.max(1, Math.trunc(asNumber(limit, 20))));
-  if (search.length < 3) {
+  if (search.length < 3 || !workspaceId) {
     return emptySearch(search);
   }
   const capabilities = await sourceCapabilities();
   const [repositories, issueResponse, chunks] = await Promise.all([
-    readRepositories({ search, limit: safeLimit }),
-    readIssues({ search, limit: safeLimit }),
+    readRepositories({ search, limit: safeLimit, workspaceId }),
+    readIssues({ search, limit: safeLimit, workspaceId }),
     capabilities.repoChunks
       ? q(
           `SELECT id, repo, path, language, kind, symbol, parent_symbol,
@@ -1192,12 +1246,13 @@ export async function searchProductData(query, limit = 20) {
                     ELSE 1
                   END AS lexical_rank
            FROM ghic_repo_chunks
-           WHERE lower(path) LIKE '%' || lower($1) || '%'
+           WHERE workspace_id = $3
+             AND (lower(path) LIKE '%' || lower($1) || '%'
               OR lower(symbol) LIKE '%' || lower($1) || '%'
-              OR to_tsvector('simple', COALESCE(text, '')) @@ websearch_to_tsquery('simple', $1)
+              OR to_tsvector('simple', COALESCE(text, '')) @@ websearch_to_tsquery('simple', $1))
            ORDER BY lexical_rank DESC, repo, path, start_line
            LIMIT $2`,
-          [search, safeLimit],
+          [search, safeLimit, workspaceId],
         )
       : Promise.resolve([]),
   ]);
@@ -1266,15 +1321,15 @@ function emptySearch(query) {
   };
 }
 
-export async function readDuplicateCandidates() {
+export async function readDuplicateCandidates(workspaceId = "") {
   const q = await database();
   const capabilities = await sourceCapabilities();
-  if (!capabilities.ledger)
+  if (!capabilities.ledger || !workspaceId)
     return { items: [], total: 0, page: 1, limit: 100, available: true };
   const rows = await q`
     SELECT DISTINCT ON (data->>'repo', data->>'number') data, created_at
     FROM ghic_ledger
-    WHERE data->>'type' = 'analysis'
+    WHERE workspace_id = ${workspaceId} AND data->>'type' = 'analysis'
       AND jsonb_typeof(data->'related_issues') = 'array'
       AND jsonb_array_length(data->'related_issues') > 0
     ORDER BY data->>'repo', data->>'number', id DESC`;

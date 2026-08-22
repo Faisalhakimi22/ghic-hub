@@ -161,7 +161,7 @@ export default function RepositoryDetail() {
                 />
                 <StatusRow
                   label="GitHub Installation"
-                  value={repo.installationStatus}
+                  value={repo.githubAccessStatus || "unauthorized"}
                 />
                 <StatusRow label="Webhook" value={repo.webhookStatus} />
               </div>

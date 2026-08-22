@@ -14,6 +14,7 @@
  * source of drift.
  */
 import { neon } from "@neondatabase/serverless";
+import { runTenancyMigrations, DEFAULT_WORKSPACE_ID } from "./migrations.mjs";
 
 const DATABASE_URL =
   process.env.DATABASE_URL ||
@@ -80,6 +81,9 @@ function ready() {
         repository_selection TEXT,
         connected_by_firebase_uid TEXT NOT NULL,
         connected_by_github_id TEXT,
+        connection_status TEXT NOT NULL DEFAULT 'connected',
+        status_reason TEXT,
+        status_changed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
         revoked_at TIMESTAMPTZ
@@ -88,6 +92,25 @@ function ready() {
       CREATE INDEX IF NOT EXISTS ghic_github_installations_active_idx
       ON ghic_github_installations (revoked_at)
       WHERE revoked_at IS NULL`;
+    // Additive lifecycle fields for deployments created before Phase 2.
+    await q`
+      ALTER TABLE ghic_github_installations
+      ADD COLUMN IF NOT EXISTS connection_status TEXT NOT NULL DEFAULT 'connected'`;
+    await q`
+      ALTER TABLE ghic_github_installations
+      ADD COLUMN IF NOT EXISTS status_reason TEXT`;
+    await q`
+      ALTER TABLE ghic_github_installations
+      ADD COLUMN IF NOT EXISTS status_changed_at TIMESTAMPTZ NOT NULL DEFAULT now()`;
+    await q`
+      UPDATE ghic_github_installations
+      SET connection_status = CASE
+        WHEN revoked_at IS NOT NULL THEN 'revoked'
+        ELSE COALESCE(NULLIF(connection_status, ''), 'connected')
+      END
+      WHERE revoked_at IS NOT NULL
+         OR connection_status IS NULL
+         OR connection_status = ''`;
     await q`
       CREATE TABLE IF NOT EXISTS ghic_github_repositories (
         repo_full_name TEXT PRIMARY KEY,
@@ -104,6 +127,21 @@ function ready() {
     await q`
       CREATE INDEX IF NOT EXISTS ghic_github_repositories_installation_idx
       ON ghic_github_repositories (installation_id)`;
+    await q`
+      CREATE TABLE IF NOT EXISTS ghic_github_installation_intents (
+        state_hash   TEXT PRIMARY KEY,
+        firebase_uid TEXT NOT NULL,
+        workspace_id TEXT NOT NULL,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+        expires_at   TIMESTAMPTZ NOT NULL,
+        consumed_at  TIMESTAMPTZ,
+        status       TEXT NOT NULL DEFAULT 'pending'
+      )`;
+    await q`
+      CREATE INDEX IF NOT EXISTS ghic_github_installation_intents_expiry_idx
+      ON ghic_github_installation_intents (expires_at)
+      WHERE consumed_at IS NULL`;
+    await runTenancyMigrations(q);
   })();
   return _ready;
 }
@@ -152,19 +190,14 @@ export async function authenticateUser(claims) {
     WHERE firebase_uid = ${claims.uid}
     RETURNING firebase_uid, github_id, name, email, avatar_url, role, settings,
               created_at, last_login`;
-  if (rows.length) return shapeUser(rows[0]);
+  if (rows.length) return withWorkspace(q, shapeUser(rows[0]));
 
   // Bootstrap only an empty installation. Once any member exists, unknown
   // identities fail closed instead of being silently admitted as members.
-  const bootstrap = await q`
-    INSERT INTO ghic_users (firebase_uid, github_id, name, email, avatar_url, role)
-    SELECT ${claims.uid}, ${claims.githubId}, ${claims.name}, ${claims.email},
-           ${claims.avatarUrl}, 'owner'
-    WHERE NOT EXISTS (SELECT 1 FROM ghic_users)
-    ON CONFLICT (firebase_uid) DO NOTHING
-    RETURNING firebase_uid, github_id, name, email, avatar_url, role, settings,
-              created_at, last_login`;
-  if (bootstrap.length) return shapeUser(bootstrap[0]);
+  const bootstrap = await bootstrapFirstUser(q, claims);
+  if (bootstrap.length) {
+    return withWorkspace(q, shapeUser(bootstrap[0]));
+  }
 
   const error = new Error(
     "This account is not a member of the GHIC workspace.",
@@ -174,30 +207,130 @@ export async function authenticateUser(claims) {
   throw error;
 }
 
+export async function bootstrapFirstUser(q, claims) {
+  const [, bootstrap] = await q.transaction([
+    q`SELECT pg_advisory_xact_lock(hashtextextended('ghic.first-user-bootstrap', 0))`,
+    q`
+      WITH inserted_user AS (
+        INSERT INTO ghic_users
+          (firebase_uid, github_id, name, email, avatar_url, role)
+        SELECT ${claims.uid}, ${claims.githubId}, ${claims.name}, ${claims.email},
+               ${claims.avatarUrl}, 'owner'
+        WHERE NOT EXISTS (SELECT 1 FROM ghic_users)
+        ON CONFLICT (firebase_uid) DO NOTHING
+        RETURNING firebase_uid, github_id, name, email, avatar_url, role,
+                  settings, created_at, last_login
+      ), inserted_membership AS (
+        INSERT INTO ghic_workspace_members (workspace_id, firebase_uid, role)
+        SELECT ${DEFAULT_WORKSPACE_ID}, firebase_uid, 'owner'
+        FROM inserted_user
+        ON CONFLICT (workspace_id, firebase_uid) DO NOTHING
+        RETURNING firebase_uid
+      )
+      SELECT u.firebase_uid, u.github_id, u.name, u.email, u.avatar_url,
+             u.role, u.settings, u.created_at, u.last_login
+      FROM inserted_user u
+      JOIN inserted_membership m USING (firebase_uid)`,
+  ]);
+  return bootstrap || [];
+}
+
+export async function resolveWorkspace(uid, { requireRole = null } = {}) {
+  const q = await database();
+  const rows = await q`
+    SELECT w.id, w.name, m.role
+    FROM ghic_workspace_members m
+    JOIN ghic_workspaces w ON w.id = m.workspace_id
+    WHERE m.firebase_uid = ${uid}
+    ORDER BY m.created_at ASC`;
+  const membership = rows.find((row) => !requireRole || roleAtLeast(row.role, requireRole));
+  if (!membership) {
+    const error = new Error("This account is not a member of an authorized GHIC workspace.");
+    error.status = 403;
+    error.code = "workspace_access_denied";
+    throw error;
+  }
+  return { id: membership.id, name: membership.name, role: membership.role };
+}
+
+async function withWorkspace(q, user) {
+  const rows = await q`
+    SELECT w.id, w.name, m.role
+    FROM ghic_workspace_members m
+    JOIN ghic_workspaces w ON w.id = m.workspace_id
+    WHERE m.firebase_uid = ${user.id}
+    ORDER BY m.created_at ASC LIMIT 1`;
+  if (!rows.length) {
+    const error = new Error("This account is not a member of an authorized GHIC workspace.");
+    error.status = 403;
+    error.code = "workspace_access_denied";
+    throw error;
+  }
+  return { ...user, workspaceId: rows[0].id, workspaceName: rows[0].name, workspaceRole: rows[0].role };
+}
+
+function roleAtLeast(actual, required) {
+  const order = { viewer: 0, member: 1, admin: 2, owner: 3 };
+  return (order[actual] ?? -1) >= (order[required] ?? 99);
+}
+
+function requireWorkspaceContext(workspaceId) {
+  const value = String(workspaceId || "").trim();
+  if (!value) {
+    const error = new Error("Workspace context is required.");
+    error.status = 403;
+    error.code = "workspace_access_denied";
+    throw error;
+  }
+  return value;
+}
+
 /** A ready Neon query function for server-only product data access. */
 export async function database() {
   await ready();
   return sql();
 }
 
-export async function getUser(uid) {
+/** Execute related writes in one Neon/Postgres transaction. */
+export async function transaction(queries) {
   await ready();
-  const q = sql();
-  const rows = await q`
-    SELECT firebase_uid, github_id, name, email, avatar_url, role, settings,
-           created_at, last_login
-    FROM ghic_users WHERE firebase_uid = ${uid}`;
-  return rows.length ? shapeUser(rows[0]) : null;
+  return sql().transaction(queries);
 }
 
-export async function listUsers() {
+export async function getUser(uid, workspaceId) {
+  workspaceId = requireWorkspaceContext(workspaceId);
   await ready();
   const q = sql();
   const rows = await q`
-    SELECT firebase_uid, github_id, name, email, avatar_url, role, settings,
-           created_at, last_login
-    FROM ghic_users ORDER BY created_at ASC`;
-  return rows.map(shapeUser);
+    SELECT u.firebase_uid, u.github_id, u.name, u.email, u.avatar_url,
+           u.role, m.role AS workspace_role, u.settings,
+           u.created_at, u.last_login
+    FROM ghic_users u
+    JOIN ghic_workspace_members m ON m.firebase_uid = u.firebase_uid
+    WHERE u.firebase_uid = ${uid} AND m.workspace_id = ${workspaceId}`;
+  return rows.length
+    ? { ...shapeUser(rows[0]), role: rows[0].workspace_role, workspaceRole: rows[0].workspace_role, workspaceId }
+    : null;
+}
+
+export async function listUsers(workspaceId) {
+  workspaceId = requireWorkspaceContext(workspaceId);
+  await ready();
+  const q = sql();
+  const rows = await q`
+    SELECT u.firebase_uid, u.github_id, u.name, u.email, u.avatar_url,
+           u.role, m.role AS workspace_role, u.settings,
+           u.created_at, u.last_login
+    FROM ghic_users u
+    JOIN ghic_workspace_members m ON m.firebase_uid = u.firebase_uid
+    WHERE m.workspace_id = ${workspaceId}
+    ORDER BY u.created_at ASC`;
+  return rows.map((row) => ({
+    ...shapeUser(row),
+    role: row.workspace_role,
+    workspaceRole: row.workspace_role,
+    workspaceId,
+  }));
 }
 
 export async function updateUserSettings(uid, patch) {
@@ -224,40 +357,130 @@ export async function updateUserSettings(uid, patch) {
  * left with nobody able to administer it, recoverable only by editing the
  * database by hand.
  */
-export async function updateUserRole(targetUid, role) {
+export async function updateUserRole(
+  targetUid,
+  role,
+  workspaceId,
+  deps = null,
+) {
+  workspaceId = requireWorkspaceContext(workspaceId);
+  if (deps) {
+    const q = await deps.database();
+    const [workspaceRows, targetRows, ownerRows, updatedRows] =
+      await deps.transaction([
+        // Serialize all owner changes for this workspace. The lock must be
+        // acquired before counting owners, otherwise concurrent demotions
+        // can both observe the same owner count and remove the last owners.
+        q`
+          SELECT id FROM ghic_workspaces
+          WHERE id = ${workspaceId}
+          FOR UPDATE`,
+        q`
+          SELECT firebase_uid, role
+          FROM ghic_workspace_members
+          WHERE firebase_uid = ${targetUid} AND workspace_id = ${workspaceId}
+          FOR UPDATE`,
+        q`
+          SELECT count(*)::int AS count
+          FROM ghic_workspace_members
+          WHERE workspace_id = ${workspaceId} AND role = 'owner'`,
+        q`
+          UPDATE ghic_workspace_members
+          SET role = ${role}, updated_at = now()
+          WHERE firebase_uid = ${targetUid} AND workspace_id = ${workspaceId}
+            AND (
+              (role = 'owner' AND ${role} = 'owner')
+              OR role <> 'owner'
+              OR (
+                SELECT count(*) FROM ghic_workspace_members
+                WHERE workspace_id = ${workspaceId} AND role = 'owner'
+              ) > 1
+            )
+          RETURNING firebase_uid, role`,
+      ]);
+
+    if (!workspaceRows.length || !targetRows.length) {
+      const e = new Error("User not found.");
+      e.status = 404;
+      throw e;
+    }
+    if (targetRows[0].role === "owner" && role !== "owner" &&
+        Number(ownerRows[0]?.count || 0) <= 1) {
+      const e = new Error(
+        "Cannot demote the only owner; promote another owner first.",
+      );
+      e.status = 409;
+      throw e;
+    }
+    if (!updatedRows.length) {
+      const e = new Error("The role could not be changed.");
+      e.status = 409;
+      throw e;
+    }
+    return deps.getUser(targetUid, workspaceId);
+  }
+
   await ready();
   const q = sql();
-
-  const [{ count }] = await q`
-    SELECT count(*)::int AS count FROM ghic_users WHERE role = 'owner'`;
-  const existing = await getUser(targetUid);
-  if (!existing) {
+  const [workspaceRows, targetRows, ownerRows, updatedRows] =
+    await transaction([
+      // Lock the workspace row for the complete owner count/update sequence.
+      q`
+        SELECT id FROM ghic_workspaces
+        WHERE id = ${workspaceId}
+        FOR UPDATE`,
+      q`
+        SELECT firebase_uid, role
+        FROM ghic_workspace_members
+        WHERE firebase_uid = ${targetUid} AND workspace_id = ${workspaceId}
+        FOR UPDATE`,
+      q`
+        SELECT count(*)::int AS count
+        FROM ghic_workspace_members
+        WHERE workspace_id = ${workspaceId} AND role = 'owner'`,
+      q`
+        UPDATE ghic_workspace_members
+        SET role = ${role}, updated_at = now()
+        WHERE firebase_uid = ${targetUid} AND workspace_id = ${workspaceId}
+          AND (
+            (role = 'owner' AND ${role} = 'owner')
+            OR role <> 'owner'
+            OR (
+              SELECT count(*) FROM ghic_workspace_members
+              WHERE workspace_id = ${workspaceId} AND role = 'owner'
+            ) > 1
+          )
+        RETURNING firebase_uid, role`,
+    ]);
+  if (!workspaceRows.length || !targetRows.length) {
     const e = new Error("User not found.");
     e.status = 404;
     throw e;
   }
-  if (existing.role === "owner" && role !== "owner" && count <= 1) {
+  if (targetRows[0].role === "owner" && role !== "owner" &&
+      Number(ownerRows[0]?.count || 0) <= 1) {
     const e = new Error(
       "Cannot demote the only owner; promote another owner first.",
     );
     e.status = 409;
     throw e;
   }
-
-  const rows = await q`
-    UPDATE ghic_users SET role = ${role} WHERE firebase_uid = ${targetUid}
-    RETURNING firebase_uid, github_id, name, email, avatar_url, role, settings,
-              created_at, last_login`;
-  return shapeUser(rows[0]);
+  if (!updatedRows.length) {
+    const e = new Error("The role could not be changed.");
+    e.status = 409;
+    throw e;
+  }
+  return getUser(targetUid, workspaceId);
 }
 
-export async function getOrgSettings() {
+export async function getOrgSettings(workspaceId) {
+  workspaceId = requireWorkspaceContext(workspaceId);
   await ready();
   const q = sql();
-  await q`INSERT INTO ghic_org_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING`;
+  await q`INSERT INTO ghic_workspace_settings (workspace_id) VALUES (${workspaceId}) ON CONFLICT (workspace_id) DO NOTHING`;
   const rows = await q`
     SELECT workspace_name, settings, updated_at, updated_by
-    FROM ghic_org_settings WHERE id = 1`;
+    FROM ghic_workspace_settings WHERE workspace_id = ${workspaceId}`;
   const row = rows[0] || {};
   return {
     workspaceName: row.workspace_name || "GHIC Workspace",
@@ -268,19 +491,20 @@ export async function getOrgSettings() {
   };
 }
 
-export async function updateOrgSettings(patch, actorUid) {
+export async function updateOrgSettings(patch, actorUid, workspaceId) {
+  workspaceId = requireWorkspaceContext(workspaceId);
   await ready();
   const q = sql();
   const { workspaceName, ...rest } = patch || {};
-  await q`INSERT INTO ghic_org_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING`;
+  await q`INSERT INTO ghic_workspace_settings (workspace_id) VALUES (${workspaceId}) ON CONFLICT (workspace_id) DO NOTHING`;
   await q`
-    UPDATE ghic_org_settings
+    UPDATE ghic_workspace_settings
     SET workspace_name = COALESCE(${workspaceName ?? null}, workspace_name),
         settings   = settings || ${JSON.stringify(rest)}::jsonb,
         updated_at = now(),
         updated_by = ${actorUid}
-    WHERE id = 1`;
-  return getOrgSettings();
+    WHERE workspace_id = ${workspaceId}`;
+  return getOrgSettings(workspaceId);
 }
 
 function shapeUser(row) {
