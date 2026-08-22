@@ -6,6 +6,16 @@ migrations v2/v3/v4 were applied to production.
 
 ## The 33 unattributed ledger rows
 
+> **Superseded 2026-08-22.** These 33 rows were deleted during a deliberate
+> test-environment reset, together with the 1891 chunks and the single
+> repository_state row, to give the install/uninstall lifecycle a clean slate.
+> The reasoning below is retained because it remains the *policy* for
+> unattributed rows: the uninstall purge still refuses to claim them, and
+> clearing them stayed a manual, itemised operation that no webhook can perform
+> (`scripts/reset_orphaned_content.py` in the classifier repo). What changed is
+> the data, not the rule.
+
+
 `ghic_ledger` holds 33 rows with `workspace_id IS NULL`. This is intentional.
 They are not a backfill that failed.
 
@@ -101,6 +111,14 @@ while automatic indexing stays disabled, but it fixes the order of operations:
 connect the repository first, index second.
 
 ## Embedding integrity baseline
+
+> **Superseded 2026-08-22.** `ghic_repo_chunks` is now empty, so the checksum
+> below describes content that no longer exists. It is kept as the worked
+> example of how to verify vector integrity across a migration: fold the whole
+> column into one order-independent hash *before* the migration, not a sample
+> ordered by a non-unique key. Record a fresh baseline once the repository is
+> reconnected and reindexed.
+
 
 Post-migration, all 1891 embeddings fold to:
 
