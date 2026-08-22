@@ -219,7 +219,7 @@ export async function readRepositories({
   status = "",
   workspaceId = "",
 } = {}) {
-  if (!workspaceId) {
+  if (!String(workspaceId || "").trim()) {
     return { items: [], total: 0, indexedTotal: 0, connectedTotal: 0,
       ...pagination(page, limit), available: false };
   }
@@ -1110,7 +1110,7 @@ export function buildDashboardOverview({
 }
 
 export async function readAnalytics(workspaceId = "") {
-  if (!workspaceId) return analyticsFromRows(emptyAggregate(), [], [], [], [], []);
+  if (!String(workspaceId || "").trim()) return analyticsFromRows(emptyAggregate(), [], [], [], [], []);
   const q = await database();
   const capabilities = await sourceCapabilities();
   const aggregate = await readAggregate(workspaceId);

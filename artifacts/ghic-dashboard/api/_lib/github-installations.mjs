@@ -1,4 +1,4 @@
-import { database, transaction, resolveWorkspace } from "./db.mjs";
+import { database, transaction, resolveWorkspace, requireWorkspaceContext } from "./db.mjs";
 import { createHash, randomBytes } from "node:crypto";
 import {
   fetchGitHubUserById,
@@ -108,7 +108,7 @@ export async function getGitHubConnectionSummary(workspaceId, deps = REAL) {
     deps = workspaceId;
     workspaceId = null;
   }
-  if (!workspaceId) throw Object.assign(new Error("Workspace context is required."), { status: 403 });
+  workspaceId = requireWorkspaceContext(workspaceId);
   const q = await deps.database();
   const rows = await q`
     SELECT
@@ -742,9 +742,7 @@ export async function refreshGitHubInstallation(
 }
 
 export async function markInstallationRevoked(installationId, workspaceId, deps = REAL) {
-  if (!workspaceId) {
-    throw Object.assign(new Error("Workspace context is required."), { status: 403 });
-  }
+  workspaceId = requireWorkspaceContext(workspaceId);
   const q = await deps.database();
   await (deps.transaction || (async (items) => Promise.all(items)))([
     q`SELECT pg_advisory_xact_lock(hashtextextended(${String(installationId)}, 0))`,
@@ -773,9 +771,7 @@ export async function markInstallationRevoked(installationId, workspaceId, deps 
 }
 
 export async function markInstallationSuspended(installationId, workspaceId, deps = REAL) {
-  if (!workspaceId) {
-    throw Object.assign(new Error("Workspace context is required."), { status: 403 });
-  }
+  workspaceId = requireWorkspaceContext(workspaceId);
   const q = await deps.database();
   await (deps.transaction || (async (items) => Promise.all(items)))([
     q`SELECT pg_advisory_xact_lock(hashtextextended(${String(installationId)}, 0))`,

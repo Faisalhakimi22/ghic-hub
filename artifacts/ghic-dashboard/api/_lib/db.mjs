@@ -13,8 +13,28 @@
  * writing to it, this should become real migrations before it becomes a
  * source of drift.
  */
+import { randomBytes } from "node:crypto";
+
 import { neon } from "@neondatabase/serverless";
-import { runTenancyMigrations, DEFAULT_WORKSPACE_ID } from "./migrations.mjs";
+import { runTenancyMigrations } from "./migrations.mjs";
+
+/**
+ * Every account owns a private workspace created at signup.
+ *
+ * The id is random, never derived from the account: an id built from an
+ * email or uid leaks who the workspace belongs to and lets anyone who knows
+ * an address guess the identifier that appears in ownership rows.
+ *
+ * The name is a constant for the same reason -- it is displayed, and the
+ * owner can rename it through the organization settings route. Nothing
+ * user-supplied reaches either value.
+ */
+const WORKSPACE_ID_BYTES = 16;
+export const DEFAULT_PERSONAL_WORKSPACE_NAME = "Personal Workspace";
+
+export function newWorkspaceId() {
+  return `ws_${randomBytes(WORKSPACE_ID_BYTES).toString("hex")}`;
+}
 
 const DATABASE_URL =
   process.env.DATABASE_URL ||
@@ -170,9 +190,17 @@ export const DEFAULT_ORG_SETTINGS = {
 /**
  * Authenticate a verified identity against workspace membership.
  *
- * The first account bootstraps an empty workspace as owner. After that,
- * Firebase proves identity only: access requires an existing ghic_users row.
- * This prevents an unrelated Firebase user from joining the shared workspace.
+ * A known account is resolved to the workspace it already belongs to. An
+ * unknown one is given a private workspace of its own and made its owner.
+ *
+ * This used to admit only the very first account and refuse every other
+ * identity, because there was one shared workspace and letting a stranger
+ * into it would have handed them somebody else's repositories. Per-account
+ * workspaces remove that risk at the source: a new identity lands in an
+ * empty workspace containing nothing, so there is nothing to protect it
+ * from. What has not changed is that membership remains the only thing that
+ * grants access to a workspace -- a valid Firebase token still proves
+ * identity and nothing else.
  */
 export async function authenticateUser(claims) {
   await ready();
@@ -192,38 +220,67 @@ export async function authenticateUser(claims) {
               created_at, last_login`;
   if (rows.length) return withWorkspace(q, shapeUser(rows[0]));
 
-  // Bootstrap only an empty installation. Once any member exists, unknown
-  // identities fail closed instead of being silently admitted as members.
-  const bootstrap = await bootstrapFirstUser(q, claims);
+  // An identity with no row yet gets its own workspace rather than being
+  // refused. It can still only ever see that workspace.
+  const bootstrap = await bootstrapUserWorkspace(q, claims);
   if (bootstrap.length) {
     return withWorkspace(q, shapeUser(bootstrap[0]));
   }
 
   const error = new Error(
-    "This account is not a member of the GHIC workspace.",
+    "This account could not be given a workspace.",
   );
   error.status = 403;
   error.code = "workspace_access_denied";
   throw error;
 }
 
-export async function bootstrapFirstUser(q, claims) {
+/**
+ * Create an account and the private workspace it owns, atomically.
+ *
+ * One transaction writes the user, the workspace, its settings and an owner
+ * membership. Partial success is the failure mode that matters: a user row
+ * with no membership is an account that can authenticate and then be refused
+ * by every route, which looks like corruption and cannot be repaired through
+ * the product. The final SELECT joins the user CTE to the membership CTE, so
+ * this returns a row only when both exist.
+ *
+ * The advisory lock is per-account, not global. Two concurrent first
+ * requests for the same new identity would otherwise each find no membership
+ * and each mint a workspace, leaving one account owning two. Keying the lock
+ * on the uid serialises that race while letting unrelated signups proceed in
+ * parallel -- a global lock would put every signup in the product behind one
+ * queue.
+ */
+export async function bootstrapUserWorkspace(q, claims, workspaceId = newWorkspaceId()) {
   const [, bootstrap] = await q.transaction([
-    q`SELECT pg_advisory_xact_lock(hashtextextended('ghic.first-user-bootstrap', 0))`,
+    q`SELECT pg_advisory_xact_lock(hashtextextended('ghic.user-bootstrap:' || ${claims.uid}, 0))`,
     q`
       WITH inserted_user AS (
         INSERT INTO ghic_users
           (firebase_uid, github_id, name, email, avatar_url, role)
-        SELECT ${claims.uid}, ${claims.githubId}, ${claims.name}, ${claims.email},
-               ${claims.avatarUrl}, 'owner'
-        WHERE NOT EXISTS (SELECT 1 FROM ghic_users)
+        VALUES (${claims.uid}, ${claims.githubId}, ${claims.name}, ${claims.email},
+                ${claims.avatarUrl}, 'owner')
         ON CONFLICT (firebase_uid) DO NOTHING
         RETURNING firebase_uid, github_id, name, email, avatar_url, role,
                   settings, created_at, last_login
+      ), inserted_workspace AS (
+        INSERT INTO ghic_workspaces (id, name)
+        SELECT ${workspaceId}, ${DEFAULT_PERSONAL_WORKSPACE_NAME}
+        FROM inserted_user
+        WHERE NOT EXISTS (
+          SELECT 1 FROM ghic_workspace_members WHERE firebase_uid = ${claims.uid}
+        )
+        RETURNING id
+      ), inserted_settings AS (
+        INSERT INTO ghic_workspace_settings (workspace_id, workspace_name)
+        SELECT id, ${DEFAULT_PERSONAL_WORKSPACE_NAME} FROM inserted_workspace
+        ON CONFLICT (workspace_id) DO NOTHING
+        RETURNING workspace_id
       ), inserted_membership AS (
         INSERT INTO ghic_workspace_members (workspace_id, firebase_uid, role)
-        SELECT ${DEFAULT_WORKSPACE_ID}, firebase_uid, 'owner'
-        FROM inserted_user
+        SELECT w.id, u.firebase_uid, 'owner'
+        FROM inserted_workspace w, inserted_user u
         ON CONFLICT (workspace_id, firebase_uid) DO NOTHING
         RETURNING firebase_uid
       )
@@ -274,7 +331,16 @@ function roleAtLeast(actual, required) {
   return (order[actual] ?? -1) >= (order[required] ?? 99);
 }
 
-function requireWorkspaceContext(workspaceId) {
+/**
+ * Reject an absent workspace, including one that is only whitespace.
+ *
+ * Exported because the same check was open-coded as `if (!workspaceId)` in
+ * the installation and product-data modules, where a string of spaces is
+ * truthy and slipped through into a query. Nothing can currently produce
+ * such a value -- ids come from the database -- but a guard that depends on
+ * that staying true is not a guard.
+ */
+export function requireWorkspaceContext(workspaceId) {
   const value = String(workspaceId || "").trim();
   if (!value) {
     const error = new Error("Workspace context is required.");

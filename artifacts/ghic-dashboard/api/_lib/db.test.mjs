@@ -2,60 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  bootstrapFirstUser,
   getOrgSettings,
   getUser,
   listUsers,
   updateOrgSettings,
   updateUserRole,
 } from "./db.mjs";
-
-function bootstrapStore() {
-  let bootstrapped = false;
-  let lock = Promise.resolve();
-  const statements = [];
-  const q = (strings, ...values) => {
-    const query = {
-      text: strings.join("?").replace(/\s+/g, " ").trim(),
-      values,
-    };
-    statements.push(query);
-    return query;
-  };
-  q.transaction = (queries) => {
-    const run = lock.then(() => {
-      if (bootstrapped) return [[], []];
-      bootstrapped = true;
-      const uid = queries[1].values[0];
-      return [[], [{ firebase_uid: uid, role: "owner", settings: {} }]];
-    });
-    lock = run.catch(() => {});
-    return run;
-  };
-  return { q, statements };
-}
-
-test("concurrent first-user bootstrap creates exactly one atomic owner membership", async () => {
-  const store = bootstrapStore();
-  const claims = (uid) => ({
-    uid,
-    githubId: null,
-    name: uid,
-    email: `${uid}@example.test`,
-    avatarUrl: null,
-  });
-  const results = await Promise.all([
-    bootstrapFirstUser(store.q, claims("first")),
-    bootstrapFirstUser(store.q, claims("second")),
-  ]);
-
-  assert.equal(results.filter((rows) => rows.length === 1).length, 1);
-  assert.equal(results.filter((rows) => rows.length === 0).length, 1);
-  assert.match(store.statements[0].text, /pg_advisory_xact_lock/);
-  assert.match(store.statements[1].text, /WITH inserted_user AS/);
-  assert.match(store.statements[1].text, /inserted_membership AS/);
-  assert.match(store.statements[1].text, /JOIN inserted_membership/);
-});
 
 function roleStore(initialRoles) {
   const roles = new Map(Object.entries(initialRoles));
