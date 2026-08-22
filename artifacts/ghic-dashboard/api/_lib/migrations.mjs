@@ -43,9 +43,16 @@ export async function runTenancyMigrations(q) {
     // ghic_org_settings still returns one row -- so once the original
     // single-tenant data was cleared, every deploy recreated the default
     // workspace as an ownerless row that nothing could reach.
+    // No FROM on the outer select, deliberately. An aggregate with no GROUP BY
+    // emits exactly one row however many inputs survive its WHERE, so
+    // `SELECT MAX(...) FROM ghic_org_settings WHERE <guard>` still inserts once
+    // that table is empty -- which is how this statement kept recreating the
+    // default workspace after the single-tenant data was cleared, and how the
+    // first attempt at guarding it failed too. With no FROM, WHERE decides
+    // whether a row exists at all, and MAX moves into a scalar subquery.
     q`INSERT INTO ghic_workspaces (id, name)
-       SELECT ${DEFAULT_WORKSPACE_ID}, COALESCE(MAX(workspace_name), 'GHIC Workspace')
-       FROM ghic_org_settings
+       SELECT ${DEFAULT_WORKSPACE_ID},
+              COALESCE((SELECT MAX(workspace_name) FROM ghic_org_settings), 'GHIC Workspace')
        WHERE NOT EXISTS (SELECT 1 FROM ghic_schema_migrations WHERE version = ${VERSION})
        ON CONFLICT (id) DO NOTHING`,
     q`ALTER TABLE ghic_org_settings ADD COLUMN IF NOT EXISTS workspace_id TEXT`,

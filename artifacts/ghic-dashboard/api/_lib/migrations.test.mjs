@@ -31,11 +31,30 @@ function fakeQuery({ fail = false, onTransaction = null } = {}) {
   return q;
 }
 
-test("the default workspace is only created during the original backfill", async () => {
-  // This statement was the one unguarded backfill in the migration. It ran on
-  // every cold start, and MAX() over an empty ghic_org_settings still yields a
-  // row, so after the single-tenant data was cleared each deploy recreated
-  // ghic-default-workspace as an ownerless row no member could reach.
+/** Drop balanced parenthesised groups, leaving only the outer query. */
+function outerQuery(sql) {
+  let out = "";
+  let depth = 0;
+  for (const char of sql) {
+    if (char === "(") depth += 1;
+    else if (char === ")") depth -= 1;
+    else if (depth === 0) out += char;
+  }
+  return out.replace(/\s+/g, " ").trim();
+}
+
+test("the default workspace insert cannot fire once migration 2 is recorded", async () => {
+  // Two bugs have lived in this one statement. First it had no guard at all
+  // and ran on every cold start. Then it was guarded as
+  // `SELECT MAX(...) FROM ghic_org_settings WHERE NOT EXISTS (...)`, which
+  // does not work: an aggregate with no GROUP BY emits exactly one row however
+  // many inputs survive the WHERE, so with that table empty the insert still
+  // fired. Both recreated ghic-default-workspace as an ownerless row.
+  //
+  // Asserting the text contains a WHERE clause is what let the second bug
+  // through -- the text was right and the semantics were wrong. So this checks
+  // the structural property that makes the guard work: the guarded SELECT must
+  // not aggregate over a table, which means no FROM outside a subquery.
   const q = fakeQuery();
   await runTenancyMigrations(q);
 
@@ -44,13 +63,29 @@ test("the default workspace is only created during the original backfill", async
     .find((text) => text.startsWith("INSERT INTO ghic_workspaces"));
 
   assert.ok(insert, "the default workspace insert should still exist");
-  assert.match(
-    insert,
-    /WHERE NOT EXISTS \(SELECT 1 FROM ghic_schema_migrations WHERE version = 2\)/,
+
+  const outer = outerQuery(insert);
+  assert.match(outer, /WHERE NOT EXISTS/);
+  assert.equal(
+    / FROM /i.test(outer),
+    false,
+    `the guarded SELECT must not aggregate over a table, or WHERE cannot ` +
+      `suppress the row. Outer query was: ${outer}`,
   );
-  // ON CONFLICT alone was never enough: it stops a duplicate id, not a row
-  // being recreated after the original was deliberately deleted.
+  // ON CONFLICT was never the guard: it stops a duplicate id, not a row being
+  // recreated after the original was deliberately deleted.
   assert.match(insert, /ON CONFLICT \(id\) DO NOTHING/);
+});
+
+test("MAX over org settings is still read, just not as the driving table", async () => {
+  const q = fakeQuery();
+  await runTenancyMigrations(q);
+  const insert = q.transactions[0]
+    .map((statement) => statement.text)
+    .find((text) => text.startsWith("INSERT INTO ghic_workspaces"));
+  // The original name is still preserved when the backfill does run.
+  assert.match(insert, /SELECT MAX\(workspace_name\) FROM ghic_org_settings/);
+  assert.match(insert, /COALESCE\(/);
 });
 
 test("every ghic_workspaces write in the migration is version-guarded", async () => {
