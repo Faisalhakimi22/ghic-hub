@@ -6,6 +6,7 @@ import {
 import { Github, RefreshCw, Search } from "lucide-react";
 import { Link } from "wouter";
 
+import { ConnectGitHubPanel } from '@/components/connect-github';
 import { DataError } from "@/components/data-state";
 import { PageContent, PageHeader, StatusBadge } from "@/components/ui/swiss";
 import { useCurrentAccount, useDashboardDate } from "@/lib/account";
@@ -68,7 +69,7 @@ export default function Repositories() {
         />
 
         {nothingConnected ? (
-          <ConnectEmptyState
+          <ConnectGitHubPanel
             configured={connection.data?.configured ?? false}
             canManage={canManageGitHub}
             onConnect={() => void startGitHubInstall()}
@@ -340,52 +341,3 @@ function GitHubConnectionBar({
   );
 }
 
-function ConnectEmptyState({
-  configured,
-  canManage,
-  onConnect,
-  connecting,
-  error,
-}: {
-  configured: boolean;
-  canManage: boolean;
-  onConnect: () => void;
-  connecting: boolean;
-  error: string | null;
-}) {
-  return (
-    <div className="border border-border bg-card p-8 flex flex-col items-start gap-4">
-      <span className="flex items-center gap-2 text-[10px] font-display tracking-widest uppercase font-bold text-muted-foreground">
-        <Github className="w-3.5 h-3.5" /> Not connected
-      </span>
-      <h2 className="text-xl font-display font-bold tracking-tight uppercase">
-        Connect GitHub
-      </h2>
-      <p className="text-sm text-muted-foreground leading-relaxed max-w-prose">
-        Install the GHIC GitHub App and choose which repositories it can read.
-        GHIC records the selection you make on GitHub — there is nothing to type
-        here.
-      </p>
-      {configured && canManage ? (
-        <button
-          onClick={onConnect}
-          disabled={connecting}
-          className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-3 font-display tracking-widest uppercase text-xs font-bold hover:bg-primary/90"
-        >
-          <Github className="w-4 h-4" /> {connecting ? "Opening GitHub..." : "Install GHIC on GitHub"}
-        </button>
-      ) : configured ? (
-        <p className="text-xs text-muted-foreground border border-border bg-muted/30 p-3 max-w-prose">
-          Ask a workspace admin or owner to connect the GitHub App.
-        </p>
-      ) : (
-        <p className="text-xs text-muted-foreground border border-border bg-muted/30 p-3 max-w-prose">
-          The GitHub App credentials are not configured on this deployment, so
-          installation cannot be verified. Set <code>GHIC_APP_ID</code> and{" "}
-          <code>GHIC_PRIVATE_KEY</code> to enable it.
-        </p>
-      )}
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
-    </div>
-  );
-}

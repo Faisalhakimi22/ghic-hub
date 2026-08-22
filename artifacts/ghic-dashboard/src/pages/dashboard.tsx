@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 
+import { ConnectGitHub, useNothingConnected } from "@/components/connect-github";
 import { DataError } from "@/components/data-state";
 import {
   Grid,
@@ -72,6 +73,7 @@ function BentoCard({
 }
 
 export default function Dashboard() {
+  const { nothingConnected } = useNothingConnected();
   const overview = useGetDashboardOverview({
     query: { queryKey: getGetDashboardOverviewQueryKey() },
   });
@@ -80,6 +82,18 @@ export default function Dashboard() {
   return (
     <div className="flex flex-col min-h-full">
       <PageHeader title="Dashboard" description="Live GHIC workspace data" />
+      {nothingConnected ? (
+        <PageContent className="flex flex-col gap-8 w-full">
+          {/* A workspace with no installation has nothing to show, and a
+              screen of zeroes tells a new account nothing about what to do
+              next. The one action that starts the product belongs here, not
+              only behind a nav item they have to think to click. */}
+          <ConnectGitHub
+            heading="Start with a repository"
+            blurb="GHIC has nothing to analyse yet. Install the GitHub App and choose which repositories it can read — the selection you make on GitHub is what GHIC records, so there is nothing to type here."
+          />
+        </PageContent>
+      ) : (
       <PageContent className="flex flex-col gap-8 w-full">
         {overview.isLoading ? (
           <div className="h-32 bg-muted animate-pulse border border-border" />
@@ -370,6 +384,7 @@ export default function Dashboard() {
           </>
         ) : null}
       </PageContent>
+      )}
     </div>
   );
 }
