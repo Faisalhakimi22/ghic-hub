@@ -334,6 +334,26 @@ export async function completeGitHubInstallation(
     return consumeCancelledIntent(viewer, state, workspaceId, deps);
   }
   assertViewerMayConnect(viewer);
+  // An install started from GitHub's own App page arrives with an
+  // installation id and no state, because no state was ever minted -- nothing
+  // in GHIC initiated it. That is a different situation from a state that is
+  // wrong, expired or replayed, and the two must not look alike to the
+  // caller: this one is recoverable by connecting from the dashboard, the
+  // others are callbacks worth refusing outright.
+  //
+  // The check below narrows nothing. A caller with no state still cannot
+  // link an installation; it only earns a code the UI can act on.
+  if (requireIntent && !String(state || "").trim()) {
+    const candidateId = Number(input.installationId ?? input.installation_id);
+    if (Number.isFinite(candidateId) && candidateId > 0) {
+      throw Object.assign(
+        new Error(
+          "This installation was started on GitHub. Connect from the dashboard to link it to your workspace.",
+        ),
+        { status: 400, code: "github_initiated_installation" },
+      );
+    }
+  }
   const intent = requireIntent
     ? await readInstallationIntent(viewer, state, workspaceId, deps)
     : null;

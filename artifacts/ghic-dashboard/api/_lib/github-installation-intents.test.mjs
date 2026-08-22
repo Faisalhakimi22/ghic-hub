@@ -97,8 +97,10 @@ test("creates a cryptographically random short-lived installation intent", async
 
 test("missing and forged states fail before GitHub verification", async () => {
   const d = fakeDeps({ intent: null });
+  // No state and no installation id: nothing identifies what this callback
+  // is even about.
   await assert.rejects(
-    completeGitHubInstallation(VIEWER, { installationId: 100 }, d.value),
+    completeGitHubInstallation(VIEWER, {}, d.value),
     (error) => error.code === "installation_state_required",
   );
   await assert.rejects(
@@ -106,6 +108,100 @@ test("missing and forged states fail before GitHub verification", async () => {
     (error) => error.code === "invalid_installation_state",
   );
   assert.equal(d.transactions, 0);
+});
+
+test("an install started on GitHub is refused with a recoverable code", async () => {
+  // An installation id with no state is the GitHub-initiated case: nothing in
+  // GHIC minted a state because nothing in GHIC started the install. It is
+  // still refused -- it just says so in a way the UI can offer a way out of,
+  // instead of reading as a broken App.
+  const d = fakeDeps({ intent: null });
+  await assert.rejects(
+    completeGitHubInstallation(VIEWER, { installationId: 100 }, d.value),
+    (error) =>
+      error.code === "github_initiated_installation" && error.status === 400,
+  );
+  // Refused means refused: nothing written, and GitHub never consulted.
+  assert.equal(d.transactions, 0);
+  assert.equal(
+    d.statements.some((statement) => /^INSERT|^UPDATE/.test(statement.text)),
+    false,
+  );
+});
+
+test("a state that is present but bad never gets the recoverable code", async () => {
+  // The recovery path must not become a way to launder a rejected callback.
+  // Every one of these carries a state, so none of them is the
+  // GitHub-initiated case, however wrong the state turns out to be.
+  const cases = [
+    ["forged", { intent: null }, "invalid_installation_state"],
+    ["expired", {
+      intent: {
+        firebase_uid: VIEWER.id,
+        workspace_id: "ghic-workspace",
+        expires_at: new Date(Date.now() - 1_000).toISOString(),
+        consumed_at: null,
+        status: "pending",
+      },
+    }, "installation_state_expired"],
+    ["another user's", {
+      intent: {
+        firebase_uid: "another-user",
+        workspace_id: "ghic-workspace",
+        expires_at: new Date(Date.now() + 60_000).toISOString(),
+        consumed_at: null,
+        status: "pending",
+      },
+    }, "installation_state_forbidden"],
+    ["already consumed", {
+      intent: {
+        firebase_uid: VIEWER.id,
+        workspace_id: "ghic-workspace",
+        expires_at: new Date(Date.now() + 60_000).toISOString(),
+        consumed_at: new Date().toISOString(),
+        status: "consumed",
+      },
+    }, "installation_state_replayed"],
+  ];
+  for (const [label, options, expected] of cases) {
+    const d = fakeDeps(options);
+    await assert.rejects(
+      completeGitHubInstallation(VIEWER, completeInput(), d.value),
+      (error) => {
+        assert.notEqual(
+          error.code,
+          "github_initiated_installation",
+          `${label} state must not be treated as recoverable`,
+        );
+        assert.equal(error.code, expected, label);
+        return true;
+      },
+    );
+    assert.equal(d.transactions, 0);
+  }
+});
+
+test("a blank state is treated as absent, not as a state to look up", async () => {
+  const d = fakeDeps({ intent: null });
+  for (const state of ["", "   ", null, undefined]) {
+    await assert.rejects(
+      completeGitHubInstallation(VIEWER, { installationId: 100, state }, d.value),
+      (error) => error.code === "github_initiated_installation",
+    );
+  }
+  assert.equal(d.transactions, 0);
+});
+
+test("the recoverable code never applies to a trusted refresh", async () => {
+  // requireIntent:false is the internal refresh path, which has no callback
+  // and no state by design. It must not be diverted into a recovery flow.
+  const d = fakeDeps();
+  const result = await completeGitHubInstallation(
+    VIEWER,
+    { installationId: 100, requireIntent: false },
+    d.value,
+  );
+  assert.equal(result.ok, true);
 });
 
 test("expired, user-mismatched, and workspace-mismatched states fail closed", async () => {

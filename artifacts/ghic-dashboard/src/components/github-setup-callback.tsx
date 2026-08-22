@@ -2,9 +2,12 @@ import React from 'react';
 import { CheckCircle2, Github, Loader2, TriangleAlert } from 'lucide-react';
 
 import {
+  GITHUB_INITIATED_INSTALLATION,
   clearSetupParams,
+  readApiErrorCode,
   readSetupParams,
   useCompleteInstallation,
+  useCreateInstallationIntent,
   type InstallationResult,
 } from '@/lib/github-connection';
 
@@ -32,7 +35,9 @@ export function GitHubSetupCallback({
   const [done, setDone] = React.useState(!params.present);
   const [result, setResult] = React.useState<InstallationResult | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [errorCode, setErrorCode] = React.useState<string | null>(null);
   const complete = useCompleteInstallation();
+  const createIntent = useCreateInstallationIntent();
   const started = React.useRef(false);
 
   React.useEffect(() => {
@@ -48,6 +53,7 @@ export function GitHubSetupCallback({
       })
       .then(setResult)
       .catch((caught: unknown) => {
+        setErrorCode(readApiErrorCode(caught));
         setError(
           caught instanceof Error
             ? caught.message
@@ -67,6 +73,53 @@ export function GitHubSetupCallback({
         icon={<Loader2 className="w-4 h-4 animate-spin" />}
         title="Connecting GitHub"
         body="GHIC is verifying the installation with GitHub and recording which repositories you selected."
+      />
+    );
+  }
+
+  // Installing from GitHub's own App page is a normal thing to do, and it
+  // lands here without a state through no fault of the user. Refusing to link
+  // is right; presenting it as a failure is not, because one click finishes
+  // the job.
+  if (errorCode === GITHUB_INITIATED_INSTALLATION) {
+    return (
+      <Panel
+        icon={<Github className="w-4 h-4" />}
+        title="Almost connected"
+        body="GHIC is installed on GitHub. Linking it to your workspace takes one more step, so that only you can connect an installation you started."
+        action={
+          <div className="flex flex-col gap-3">
+            <button
+              disabled={createIntent.isPending}
+              onClick={() => {
+                createIntent
+                  .mutateAsync()
+                  .then(({ installUrl }) => {
+                    window.location.assign(installUrl);
+                  })
+                  .catch((caught: unknown) => {
+                    setErrorCode(null);
+                    setError(
+                      caught instanceof Error
+                        ? caught.message
+                        : 'GHIC could not start the connection.',
+                    );
+                  });
+              }}
+              className="w-full bg-primary text-primary-foreground px-5 py-3 font-display tracking-widest uppercase text-xs font-bold hover:bg-primary/90 disabled:opacity-60"
+            >
+              {createIntent.isPending ? 'Connecting…' : 'Connect to workspace'}
+            </button>
+            <button
+              onClick={() => {
+                window.location.assign('/repositories');
+              }}
+              className="w-full border border-border px-5 py-3 font-display tracking-widest uppercase text-xs font-bold hover:bg-muted"
+            >
+              Not now
+            </button>
+          </div>
+        }
       />
     );
   }

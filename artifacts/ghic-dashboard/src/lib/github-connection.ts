@@ -72,6 +72,26 @@ export function useCreateInstallationIntent() {
  * screen never reaches this at all -- GitHub simply does not redirect --
  * so the absent-parameters case is the cancellation case.
  */
+/**
+ * The API returns `{ code, error }` for a 4xx and customFetch surfaces the
+ * parsed body as `ApiError.data`. Read the code rather than matching on the
+ * message: messages are written for people and will be reworded.
+ */
+export function readApiErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== 'object' || !('data' in error)) return null;
+  const data = (error as { data?: unknown }).data;
+  if (!data || typeof data !== 'object' || !('code' in data)) return null;
+  const code = (data as { code?: unknown }).code;
+  return typeof code === 'string' ? code : null;
+}
+
+/**
+ * The installation exists on GitHub but GHIC never issued the state that
+ * proves who started it, so it cannot be linked yet. Recoverable: connecting
+ * from the dashboard mints a state and adopts the existing installation.
+ */
+export const GITHUB_INITIATED_INSTALLATION = 'github_initiated_installation';
+
 export function readSetupParams(search: string = window.location.search) {
   const params = new URLSearchParams(search);
   const installationId = params.get('installation_id');
