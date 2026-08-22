@@ -31,6 +31,42 @@ function fakeQuery({ fail = false, onTransaction = null } = {}) {
   return q;
 }
 
+test("the default workspace is only created during the original backfill", async () => {
+  // This statement was the one unguarded backfill in the migration. It ran on
+  // every cold start, and MAX() over an empty ghic_org_settings still yields a
+  // row, so after the single-tenant data was cleared each deploy recreated
+  // ghic-default-workspace as an ownerless row no member could reach.
+  const q = fakeQuery();
+  await runTenancyMigrations(q);
+
+  const insert = q.transactions[0]
+    .map((statement) => statement.text)
+    .find((text) => text.startsWith("INSERT INTO ghic_workspaces"));
+
+  assert.ok(insert, "the default workspace insert should still exist");
+  assert.match(
+    insert,
+    /WHERE NOT EXISTS \(SELECT 1 FROM ghic_schema_migrations WHERE version = 2\)/,
+  );
+  // ON CONFLICT alone was never enough: it stops a duplicate id, not a row
+  // being recreated after the original was deliberately deleted.
+  assert.match(insert, /ON CONFLICT \(id\) DO NOTHING/);
+});
+
+test("every ghic_workspaces write in the migration is version-guarded", async () => {
+  const q = fakeQuery();
+  await runTenancyMigrations(q);
+
+  const writes = q.transactions[0]
+    .map((statement) => statement.text)
+    .filter((text) => /^(INSERT INTO|UPDATE) ghic_workspaces\b/.test(text));
+
+  assert.ok(writes.length > 0);
+  for (const write of writes) {
+    assert.match(write, /ghic_schema_migrations WHERE version = 2/, write.slice(0, 80));
+  }
+});
+
 test("migration is one locked transaction with validation before completion", async () => {
   const q = fakeQuery();
   await runTenancyMigrations(q);

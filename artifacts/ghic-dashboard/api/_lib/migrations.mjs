@@ -38,9 +38,15 @@ export async function runTenancyMigrations(q) {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_by TEXT
     )`,
+    // Guarded like every other backfill in this migration. Without the
+    // guard this ran on each cold start, and MAX() over an empty
+    // ghic_org_settings still returns one row -- so once the original
+    // single-tenant data was cleared, every deploy recreated the default
+    // workspace as an ownerless row that nothing could reach.
     q`INSERT INTO ghic_workspaces (id, name)
        SELECT ${DEFAULT_WORKSPACE_ID}, COALESCE(MAX(workspace_name), 'GHIC Workspace')
        FROM ghic_org_settings
+       WHERE NOT EXISTS (SELECT 1 FROM ghic_schema_migrations WHERE version = ${VERSION})
        ON CONFLICT (id) DO NOTHING`,
     q`ALTER TABLE ghic_org_settings ADD COLUMN IF NOT EXISTS workspace_id TEXT`,
     q`ALTER TABLE ghic_github_installations ADD COLUMN IF NOT EXISTS workspace_id TEXT`,
