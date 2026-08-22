@@ -116,7 +116,11 @@ export async function getGitHubConnectionSummary(workspaceId, deps = REAL) {
       account_login,
       account_type,
       repository_selection,
-      connected_at,
+      -- The installation row is written when the installation is connected,
+      -- so created_at is that moment. There is no connected_at column on this
+      -- table; ghic_github_repositories has one, which is where the name came
+      -- from. Aliased so the API contract keeps its connectedAt field.
+      created_at AS connected_at,
       revoked_at,
       connection_status,
       status_reason,
