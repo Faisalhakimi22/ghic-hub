@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import Login from "@/pages/login";
 import { DataError } from "@/components/data-state";
 import { GitHubSetupCallback } from "@/components/github-setup-callback";
+import { MarketingSessionBridge } from "@/components/marketing-session-bridge";
 import { useCurrentAccount } from "@/lib/account";
 
 // Pages
@@ -136,12 +137,18 @@ function ProtectedApp() {
   );
 }
 
+function AppContent() {
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  if (path === "/marketing-session") return <MarketingSessionBridge />;
+  return <ProtectedApp />;
+}
+
 function App() {
   return (
     <ThemeProvider defaultTheme="system" storageKey="ghic-theme">
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <ProtectedApp />
+          <AppContent />
         </AuthProvider>
       </QueryClientProvider>
     </ThemeProvider>
