@@ -13,6 +13,7 @@ import {
   GitPullRequest,
   History,
   LayoutDashboard,
+  Menu,
   PlayCircle,
   Search,
   Settings,
@@ -26,6 +27,12 @@ import { ThemeToggle } from "../theme-toggle";
 import { useAuth } from "@/lib/auth";
 import { LogOut } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import {
   type DashboardAccount,
   useCurrentAccount,
@@ -76,6 +83,7 @@ const NAVIGATION = [
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
+  const [mobileNavigationOpen, setMobileNavigationOpen] = React.useState(false);
   const account = useCurrentAccount();
   const organization = useCurrentOrganization();
   const { setTheme } = useTheme();
@@ -84,10 +92,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
     if (account.data?.settings.theme) setTheme(account.data.settings.theme);
   }, [account.data?.settings.theme, setTheme]);
 
+  React.useEffect(() => {
+    setMobileNavigationOpen(false);
+  }, [location]);
+
   return (
-    <div className="min-h-screen w-full flex bg-background text-foreground selection:bg-primary/30">
+    <div className="h-svh w-full flex overflow-hidden bg-background text-foreground selection:bg-primary/30">
       {/* Sidebar Rail */}
-      <aside className="w-56 shrink-0 border-r border-border flex flex-col justify-between bg-card relative z-10">
+      <aside className="hidden w-56 shrink-0 border-r border-border md:flex flex-col justify-between bg-card relative z-10">
         <div className="flex-1 overflow-y-auto py-4 flex flex-col gap-6">
           <div className="px-4 mb-2 flex items-center justify-between">
             <div className="flex items-center gap-2 min-w-0">
@@ -105,38 +117,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
           <AccountStrip account={account.data} />
 
-          <div className="flex flex-col gap-6">
-            {NAVIGATION.map((group, idx) => (
-              <div key={idx} className="flex flex-col">
-                <span className="px-4 text-[10px] font-display uppercase tracking-widest text-muted-foreground mb-2">
-                  {group.group}
-                </span>
-                <nav className="flex flex-col">
-                  {group.items.map((item) => {
-                    const isActive =
-                      item.path === "/"
-                        ? location === "/"
-                        : location.startsWith(item.path);
-
-                    return (
-                      <Link
-                        key={item.path}
-                        href={item.path}
-                        className={`flex items-center gap-3 px-4 py-1.5 text-sm transition-colors ${
-                          isActive
-                            ? "text-primary bg-primary/5 border-r-2 border-primary"
-                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50 border-r-2 border-transparent"
-                        }`}
-                      >
-                        <item.icon className="w-4 h-4" />
-                        <span className="font-medium">{item.name}</span>
-                      </Link>
-                    );
-                  })}
-                </nav>
-              </div>
-            ))}
-          </div>
+          <NavigationGroups location={location} />
         </div>
 
         <AccountFooter
@@ -147,9 +128,108 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-        {/* Top Navbar / Header could go here if needed, but we'll put page headers inside pages to match Swiss Grid */}
-        <div className="flex-1 overflow-y-auto">{children}</div>
+        <header className="h-14 shrink-0 border-b border-border bg-card px-3 flex items-center justify-between md:hidden">
+          <div className="flex items-center gap-2 min-w-0">
+            <Sheet
+              open={mobileNavigationOpen}
+              onOpenChange={setMobileNavigationOpen}
+            >
+              <SheetTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Open navigation"
+                  className="h-9 w-9 shrink-0 border border-border inline-flex items-center justify-center hover:bg-muted transition-colors"
+                >
+                  <Menu className="h-4 w-4" />
+                </button>
+              </SheetTrigger>
+              <SheetContent
+                side="left"
+                className="w-[88vw] max-w-[320px] p-0 gap-0 bg-card flex flex-col"
+              >
+                <SheetTitle className="sr-only">GHIC navigation</SheetTitle>
+                <div className="flex-1 min-h-0 overflow-y-auto py-4 flex flex-col gap-6">
+                  <div className="px-4 pr-12 flex items-center gap-2">
+                    <img
+                      src="/logo.png"
+                      alt="GHIC"
+                      className="h-6 w-6 shrink-0 object-contain"
+                    />
+                    <span className="font-display font-bold tracking-widest uppercase text-sm">
+                      GHIC
+                    </span>
+                  </div>
+                  <AccountStrip account={account.data} />
+                  <NavigationGroups
+                    location={location}
+                    onNavigate={() => setMobileNavigationOpen(false)}
+                  />
+                </div>
+                <AccountFooter
+                  account={account.data}
+                  workspace={organization.data?.workspaceName}
+                />
+              </SheetContent>
+            </Sheet>
+            <img
+              src="/logo.png"
+              alt=""
+              className="h-6 w-6 shrink-0 object-contain"
+            />
+            <span className="font-display font-bold tracking-widest uppercase text-sm truncate">
+              GHIC
+            </span>
+          </div>
+          <ThemeToggle />
+        </header>
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+          {children}
+        </div>
       </main>
+    </div>
+  );
+}
+
+function NavigationGroups({
+  location,
+  onNavigate,
+}: {
+  location: string;
+  onNavigate?: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-6">
+      {NAVIGATION.map((group) => (
+        <div key={group.group} className="flex flex-col">
+          <span className="px-4 text-[10px] font-display uppercase tracking-widest text-muted-foreground mb-2">
+            {group.group}
+          </span>
+          <nav className="flex flex-col">
+            {group.items.map((item) => {
+              const isActive =
+                item.path === "/"
+                  ? location === "/"
+                  : location.startsWith(item.path);
+
+              return (
+                <Link
+                  key={item.path}
+                  href={item.path}
+                  onClick={onNavigate}
+                  className={`min-h-10 md:min-h-0 flex items-center gap-3 px-4 py-2 md:py-1.5 text-sm transition-colors ${
+                    isActive
+                      ? "text-primary bg-primary/5 border-r-2 border-primary"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50 border-r-2 border-transparent"
+                  }`}
+                >
+                  <item.icon className="w-4 h-4 shrink-0" />
+                  <span className="font-medium">{item.name}</span>
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+      ))}
     </div>
   );
 }

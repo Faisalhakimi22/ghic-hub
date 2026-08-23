@@ -199,8 +199,8 @@ function Panel({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-6">
-      <div className="w-full max-w-md border border-border bg-card p-8 flex flex-col gap-5">
+    <div className="min-h-svh flex items-center justify-center bg-background px-4 py-6 sm:px-6">
+      <div className="w-full max-w-md border border-border bg-card p-5 sm:p-8 flex flex-col gap-5">
         <span className="flex items-center gap-2 text-[10px] font-display tracking-widest uppercase font-bold text-muted-foreground">
           {icon} GitHub App
         </span>

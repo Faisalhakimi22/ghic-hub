@@ -49,7 +49,7 @@ function BentoCard({
   };
   return (
     <div
-      className={`p-5 flex flex-col justify-between min-h-[148px] ${variants[variant]}`}
+      className={`p-4 sm:p-5 flex flex-col justify-between min-h-[132px] sm:min-h-[148px] min-w-0 ${variants[variant]}`}
     >
       <div className="flex items-start justify-between gap-2">
         <span
@@ -59,7 +59,7 @@ function BentoCard({
         </span>
         {Icon && <Icon className={`w-3.5 h-3.5 shrink-0 ${muted[variant]}`} />}
       </div>
-      <div className="font-display font-bold leading-none tracking-tight text-4xl">
+      <div className="font-display font-bold leading-none tracking-tight text-3xl sm:text-4xl break-words [overflow-wrap:anywhere]">
         {value === null || value === undefined ? (
           <span className="opacity-40" title="Not recorded">
             &mdash;
@@ -183,7 +183,7 @@ export default function Dashboard() {
                         key={item.id}
                         className={`p-4 flex flex-col gap-2 ${index + 1 < overview.data.recentActivity.length ? "border-b border-border" : ""}`}
                       >
-                        <div className="flex items-start justify-between gap-4">
+                        <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:gap-4">
                           <p className="text-sm">
                             <span className="font-bold mr-2">{item.actor}</span>
                             <span className="text-muted-foreground">
@@ -226,7 +226,7 @@ export default function Dashboard() {
                         key={alert.id}
                         className={`p-4 flex flex-col gap-2 ${index + 1 < overview.data.alerts.length ? "border-b border-border" : ""}`}
                       >
-                        <div className="flex justify-between items-start gap-4">
+                        <div className="flex flex-col justify-between items-start gap-2 sm:flex-row sm:gap-4">
                           <div className="flex items-center gap-2">
                             <StatusBadge
                               status={
@@ -277,7 +277,7 @@ export default function Dashboard() {
               </h2>
               {overview.data.recentAnalyses.length ? (
                 <div className="border border-border bg-card overflow-x-auto">
-                  <table className="w-full text-sm text-left">
+                  <table className="w-full min-w-[760px] text-sm text-left">
                     <thead className="bg-muted/50 border-b border-border">
                       <tr>
                         {[
@@ -350,11 +350,11 @@ export default function Dashboard() {
                   {overview.data.repositoryIndexing.map((repository) => (
                     <div
                       key={repository.id}
-                      className="p-4 grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-5 text-sm"
+                      className="p-4 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center gap-2 sm:gap-5 text-sm"
                     >
                       <Link
                         href={`/repositories/${repository.id}`}
-                        className="font-bold truncate hover:text-primary"
+                        className="font-bold break-words hover:text-primary sm:truncate"
                       >
                         {repository.fullName}
                       </Link>

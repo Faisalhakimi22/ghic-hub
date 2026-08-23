@@ -40,21 +40,21 @@ export default function RepositoryDetail() {
 
   if (query.isLoading) {
     return (
-      <div className="p-8 animate-pulse text-muted-foreground">
+      <div className="p-4 sm:p-6 lg:p-8 animate-pulse text-muted-foreground">
         Loading repository...
       </div>
     );
   }
   if (query.isError) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <DataError error={query.error} title="Repository unavailable" />
       </div>
     );
   }
   if (!query.data)
     return (
-      <div className="p-8 text-muted-foreground">Repository not found.</div>
+      <div className="p-4 sm:p-6 lg:p-8 text-muted-foreground">Repository not found.</div>
     );
 
   const repo = query.data;
@@ -82,8 +82,8 @@ export default function RepositoryDetail() {
         </a>
       </PageHeader>
 
-      <div className="px-8 border-b border-border bg-card overflow-x-auto scrollbar-none">
-        <div className="flex">
+      <div className="px-4 sm:px-6 lg:px-8 border-b border-border bg-card overflow-x-auto scrollbar-none">
+        <div className="flex min-w-max">
           {tabs.map((tab) => (
             <button
               key={tab}

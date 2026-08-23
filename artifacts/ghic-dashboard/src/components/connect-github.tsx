@@ -33,7 +33,7 @@ export function ConnectGitHubPanel({
   blurb?: string;
 }) {
   return (
-    <div className="border border-border bg-card p-8 flex flex-col items-start gap-4">
+    <div className="border border-border bg-card p-5 sm:p-8 flex flex-col items-start gap-4 min-w-0">
       <span className="flex items-center gap-2 text-[10px] font-display tracking-widest uppercase font-bold text-muted-foreground">
         <Github className="w-3.5 h-3.5" /> Not connected
       </span>
@@ -48,7 +48,7 @@ export function ConnectGitHubPanel({
           onClick={onConnect}
           disabled={connecting}
           data-testid="connect-github"
-          className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-3 font-display tracking-widest uppercase text-xs font-bold hover:bg-primary/90"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary text-primary-foreground px-5 py-3 font-display tracking-widest uppercase text-xs font-bold hover:bg-primary/90"
         >
           <Github className="w-4 h-4" />{' '}
           {connecting ? 'Opening GitHub...' : 'Install GHIC on GitHub'}

@@ -126,8 +126,8 @@ export default function Settings() {
         </button>
       </PageHeader>
 
-      <div className="px-8 border-b border-border bg-card">
-        <div className="flex">
+      <div className="px-4 sm:px-6 lg:px-8 border-b border-border bg-card overflow-x-auto scrollbar-none">
+        <div className="flex min-w-max">
           {(["account", "organization"] as const).map((item) => (
             <button
               key={item}
@@ -328,7 +328,7 @@ export default function Settings() {
                     onChange={(event) => setWorkspaceName(event.target.value)}
                   />
                 </Field>
-                <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                   <Info label="Organization" value={organization.data.name} />
                   <Info
                     label="Current role"
@@ -348,7 +348,7 @@ export default function Settings() {
                     return (
                       <div
                         key={member.id}
-                        className="py-3 flex items-center justify-between gap-4"
+                        className="py-3 flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center sm:gap-4"
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           {member.avatarUrl ? (
@@ -414,7 +414,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="border border-border bg-card p-6 flex flex-col gap-5">
+    <section className="border border-border bg-card p-4 sm:p-6 flex flex-col gap-5">
       <h2 className="text-sm font-display tracking-widest uppercase font-bold">
         {title}
       </h2>

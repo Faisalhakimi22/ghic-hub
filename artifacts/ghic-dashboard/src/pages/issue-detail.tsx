@@ -30,18 +30,18 @@ export default function IssueDetail() {
 
   if (query.isLoading)
     return (
-      <div className="p-8 animate-pulse text-muted-foreground">
+      <div className="p-4 sm:p-6 lg:p-8 animate-pulse text-muted-foreground">
         Loading issue...
       </div>
     );
   if (query.isError)
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <DataError error={query.error} title="Issue unavailable" />
       </div>
     );
   if (!query.data)
-    return <div className="p-8 text-muted-foreground">Issue not found.</div>;
+    return <div className="p-4 sm:p-6 lg:p-8 text-muted-foreground">Issue not found.</div>;
 
   const data = query.data;
   const issue = data.issue;
@@ -230,7 +230,7 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="border border-border bg-card p-6 min-w-0">
+    <section className="border border-border bg-card p-4 sm:p-6 min-w-0">
       <h2 className="text-sm font-display tracking-widest uppercase font-bold border-b border-border pb-2 mb-4">
         {title}
       </h2>

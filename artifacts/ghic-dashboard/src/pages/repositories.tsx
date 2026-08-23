@@ -105,7 +105,7 @@ export default function Repositories() {
           <DataError error={query.error} title="Repositories unavailable" />
         ) : (
           <div className="border border-border bg-card overflow-x-auto">
-            <table className="w-full text-sm text-left">
+            <table className="w-full min-w-[820px] text-sm text-left">
               <thead className="bg-muted/50 border-b border-border">
                 <tr>
                   {[
@@ -340,4 +340,3 @@ function GitHubConnectionBar({
     </div>
   );
 }
-

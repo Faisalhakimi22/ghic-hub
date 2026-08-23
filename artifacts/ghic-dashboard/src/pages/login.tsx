@@ -29,8 +29,8 @@ export default function Login() {
   const setup = gitHubSetupState();
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-6">
-      <div className="w-full max-w-md border border-border bg-card p-8 flex flex-col gap-6">
+    <div className="min-h-svh flex items-center justify-center bg-background px-4 py-6 sm:px-6">
+      <div className="w-full max-w-md border border-border bg-card p-5 sm:p-8 flex flex-col gap-6">
         <div className="flex flex-col gap-2">
           <img
             src="/logo.png"

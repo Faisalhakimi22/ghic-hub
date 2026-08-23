@@ -28,7 +28,7 @@ export default function AuditLogs() {
           />
         ) : (
           <div className="border border-border bg-card overflow-x-auto">
-            <table className="w-full text-sm text-left">
+            <table className="w-full min-w-[760px] text-sm text-left">
               <thead className="bg-muted/50 border-b border-border">
                 <tr>
                   {[
