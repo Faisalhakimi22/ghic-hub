@@ -3,6 +3,7 @@ import { useAuth } from '@/lib/auth';
 import { MARKETING_URL } from '@/lib/firebase';
 
 const MESSAGE_TYPE = 'ghic:hub-connection';
+const REQUEST_TYPE = 'ghic:hub-connection-request';
 const POLL_INTERVAL_MS = 15_000;
 
 type ConnectionResponse = {
@@ -43,7 +44,20 @@ export function MarketingSessionBridge() {
     if (loading) return;
     if (!user) {
       publish(false, false);
-      return;
+
+      const onRequest = (event: MessageEvent<unknown>) => {
+        const targetOrigin = allowedParentOrigin();
+        if (
+          targetOrigin &&
+          event.origin === targetOrigin &&
+          event.source === window.parent &&
+          (event.data as { type?: unknown } | null)?.type === REQUEST_TYPE
+        ) {
+          publish(false, false);
+        }
+      };
+      window.addEventListener('message', onRequest);
+      return () => window.removeEventListener('message', onRequest);
     }
 
     let cancelled = false;
@@ -84,15 +98,28 @@ export function MarketingSessionBridge() {
 
     void checkConnection();
     const interval = window.setInterval(checkConnection, POLL_INTERVAL_MS);
+    const onRequest = (event: MessageEvent<unknown>) => {
+      const targetOrigin = allowedParentOrigin();
+      if (
+        targetOrigin &&
+        event.origin === targetOrigin &&
+        event.source === window.parent &&
+        (event.data as { type?: unknown } | null)?.type === REQUEST_TYPE
+      ) {
+        void checkConnection();
+      }
+    };
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') void checkConnection();
     };
+    window.addEventListener('message', onRequest);
     window.addEventListener('focus', checkConnection);
     document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
       cancelled = true;
       window.clearInterval(interval);
+      window.removeEventListener('message', onRequest);
       window.removeEventListener('focus', checkConnection);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
