@@ -1,4 +1,5 @@
 import { database, transaction, resolveWorkspace, requireWorkspaceContext } from "./db.mjs";
+import { planForWorkspace, partitionRepositories } from "./plans.mjs";
 import { createHash, randomBytes } from "node:crypto";
 import {
   fetchGitHubUserById,
@@ -419,8 +420,33 @@ export async function completeGitHubInstallation(
   );
 
   const account = installation.account || {};
-  const repos = await deps.listInstallationRepositories(installationId);
-  const repoNames = repos.map((repo) => String(repo.full_name || "")).filter(Boolean);
+  const allRepos = await deps.listInstallationRepositories(installationId);
+  const allRepoNames = allRepos
+    .map((repo) => String(repo.full_name || ""))
+    .filter(Boolean);
+
+  // Plan limit, applied on the only path that writes a repository row for a
+  // fresh connection. GitHub has already granted access to everything the user
+  // ticked; what the plan governs is how much of that GHIC takes up and
+  // analyses. Refusing the whole connection instead would leave GHIC's record
+  // disagreeing with GitHub's, which is the state this function exists to
+  // prevent.
+  const plan = deps.planForWorkspace
+    ? await deps.planForWorkspace(workspaceId, deps)
+    : await planForWorkspace(workspaceId, deps);
+  const alreadyConnected = await q`
+    SELECT repo_full_name FROM ghic_github_repositories
+    WHERE workspace_id = ${workspaceId} AND active = true`;
+  const partition = partitionRepositories(
+    allRepoNames,
+    alreadyConnected.map((row) => row.repo_full_name),
+    plan.maxRepositories,
+  );
+  const allowedNames = new Set(partition.allowed);
+  const repos = allRepos.filter((repo) =>
+    allowedNames.has(String(repo.full_name || "")),
+  );
+  const repoNames = partition.allowed;
   let repoQueryCount = 0;
   const consumedAt = new Date().toISOString();
   const queries = [q`
@@ -670,6 +696,14 @@ export async function completeGitHubInstallation(
       private: Boolean(repo.private),
       htmlUrl: repo.html_url || null,
     })),
+    // Reported, not thrown. The connection succeeded; some repositories were
+    // simply not taken up. A user who ticked twelve boxes on GitHub and got
+    // one repository needs to be told which, and why, rather than left to
+    // discover the difference on the repositories page.
+    plan: plan.plan,
+    repositoryLimit: partition.limit,
+    refusedRepositories: partition.refused,
+    limitReached: partition.refused.length > 0,
   };
 }
 
@@ -901,6 +935,21 @@ export async function disconnectGitHubInstallation(
   return { ok: true, installationId, disconnected: true };
 }
 
+/**
+ * DEAD CODE. Nothing calls this, and it is NOT an enforcement path.
+ *
+ * The only path that writes a repository row for a connection is
+ * completeGitHubInstallation, and that is where the plan limit is applied.
+ * This function was the obvious-looking place to put that check, which is
+ * exactly the danger: a limit added here would compile, review cleanly, and
+ * never once run.
+ *
+ * It is kept rather than deleted only because the Python backend performs the
+ * equivalent reconciliation on installation_repositories webhooks, and this
+ * is the shape that would be reached for if that ever moved to the Hub. If
+ * you are here to add a rule, check `git grep syncInstallationRepositories`
+ * first: at time of writing the only hit is this definition and its tests.
+ */
 export async function syncInstallationRepositories(
   installationId, repos, workspaceId = null, deps = REAL,
 ) {
@@ -923,18 +972,38 @@ export async function syncInstallationRepositories(
       });
     }
   }
+  // Plan limit. Applied here rather than at the API edge because this is the
+  // only path that writes a repository row -- a limit checked in the browser,
+  // or in the route above, is a limit a webhook or a direct call walks past.
+  const plan = deps.planForWorkspace
+    ? await deps.planForWorkspace(workspaceId, deps)
+    : await planForWorkspace(workspaceId, deps);
+  const connectedRows = await q`
+    SELECT repo_full_name FROM ghic_github_repositories
+    WHERE workspace_id = ${workspaceId} AND active = true`;
+  const { allowed, refused, limit } = partitionRepositories(
+    names,
+    connectedRows.map((row) => row.repo_full_name),
+    plan.maxRepositories,
+  );
+  const allowedSet = new Set(allowed);
+  const keptNames = allowed;
+
   const queries = [];
-  if (names.length) {
+  if (keptNames.length) {
     queries.push(q`
       UPDATE ghic_github_repositories
       SET active = false, removed_at = now(), updated_at = now()
       WHERE installation_id = ${installationId}
         AND workspace_id = ${workspaceId}
-        AND repo_full_name <> ALL(${names}::text[])`);
+        AND repo_full_name <> ALL(${keptNames}::text[])`);
   }
   for (const repo of repos) {
     const fullName = String(repo.full_name || "");
     if (!fullName) continue;
+    // Refused repositories are simply not written. GitHub still grants access
+    // to them; GHIC just does not track or analyse them until the plan allows.
+    if (!allowedSet.has(fullName)) continue;
     queries.push(q`
       INSERT INTO ghic_github_repositories (
         repo_full_name, installation_id, workspace_id, github_repo_id, private,
@@ -964,6 +1033,16 @@ export async function syncInstallationRepositories(
         `);
   }
   await (deps.transaction || transaction)(queries);
+  // Returned rather than thrown. The connection itself succeeded; some
+  // repositories were simply not taken up, and the caller needs to be able to
+  // say so without the whole install reading as a failure.
+  return {
+    connected: allowed.length,
+    refused,
+    limit,
+    plan: plan.plan,
+    limitReached: refused.length > 0,
+  };
 }
 
 export async function deactivateRepository(fullName, workspaceId = null, deps = REAL) {

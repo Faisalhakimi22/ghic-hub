@@ -107,6 +107,15 @@ function dependencies(overrides = {}) {
       installationId: Number(id),
       disconnected: true,
     }),
+    usageForWorkspace: async (workspaceId) => ({
+      plan: "starter",
+      period: "2026-08",
+      enforced: true,
+      workspaceId,
+      issues: { used: 12, limit: 500, remaining: 488 },
+      repositories: { used: 1, limit: 1, remaining: 0 },
+      outcomes: { counted: 12 },
+    }),
     ...overrides,
   };
 }
@@ -682,4 +691,50 @@ test("the GitHub connection routes reject methods they do not define", async () 
   const res = response();
   await handler(request("github/connection", { method: "DELETE" }), res);
   assert.equal(res.statusCode, 405);
+});
+
+test("usage is read for the viewer's own workspace", async () => {
+  const handler = createHandler(dependencies());
+  const res = response();
+  await handler(request("usage"), res);
+  assert.equal(res.statusCode, 200);
+  // Not a workspace named in the request. A usage panel is a bill, and
+  // reading somebody else's would be a tenancy hole in a read path.
+  assert.equal(res.body.workspaceId, "workspace-a");
+  assert.equal(res.body.issues.used, 12);
+});
+
+test("usage is readable by every role, not only administrators", async () => {
+  // A viewer who cannot see why analysis stopped will report it as a bug.
+  const handler = createHandler(dependencies());
+  const res = response();
+  await handler(request("usage", { role: "viewer" }), res);
+  assert.equal(res.statusCode, 200);
+});
+
+test("usage rejects writes", async () => {
+  const handler = createHandler(dependencies());
+  const res = response();
+  await handler(request("usage", { method: "POST" }), res);
+  // The browser never moves the meter. Both places that do are server-side.
+  assert.equal(res.statusCode, 405);
+});
+
+test("an unauthenticated request never reaches usage", async () => {
+  let read = false;
+  const handler = createHandler(
+    dependencies({
+      verifyRequest: async () => {
+        throw new AuthError("no", 401);
+      },
+      usageForWorkspace: async () => {
+        read = true;
+        return {};
+      },
+    }),
+  );
+  const res = response();
+  await handler(request("usage"), res);
+  assert.equal(res.statusCode, 401);
+  assert.equal(read, false);
 });

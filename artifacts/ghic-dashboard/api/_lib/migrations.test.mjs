@@ -115,7 +115,15 @@ test("migration is one locked transaction with validation before completion", as
   );
   assert.ok(statements.some((text) => /tenancy migration validation failed/.test(text)));
   assert.match(statements.at(-1), /INSERT INTO ghic_schema_migrations/);
-  assert.match(statements.at(-1), /version = 4/);
+  // The highest version is recorded last, whatever that version currently is.
+  // Pinning the number here meant every new migration broke this test for a
+  // reason unrelated to what it is checking: that the run ends by recording
+  // itself, after the validation that could still abort it.
+  const recorded = statements
+    .filter((text) => /INSERT INTO ghic_schema_migrations/.test(text))
+    .map((text) => Number(text.match(/version = (\d+)/)[1]));
+  assert.deepEqual(recorded, [...recorded].sort((a, b) => a - b));
+  assert.equal(Number(statements.at(-1).match(/version = (\d+)/)[1]), Math.max(...recorded));
 });
 
 test("concurrent migration attempts serialize at the transaction boundary", async () => {
@@ -202,6 +210,61 @@ test("ledger attribution conflict is transaction-fatal and retryable", async () 
   await assert.rejects(() => runTenancyMigrations(q), /conflicting ledger attribution/);
   await runTenancyMigrations(q);
   assert.equal(q.transactions.length, 2);
+});
+
+test("plans carry their limits in the database, not in either service", async () => {
+  // Two services enforce these numbers -- the Hub refuses a repository
+  // connection, the Python backend refuses an analysis. The same limits
+  // written twice in two languages drift, and the way they drift is a
+  // customer charged for one thing and served another.
+  const q = fakeQuery();
+  await runTenancyMigrations(q);
+  const sql = q.transactions[0].map((statement) => statement.text).join("\n");
+
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS ghic_plans/);
+  assert.match(sql, /'starter', 1, 500, 'month'/);
+  assert.match(sql, /'pro', 10, 10000, 'month'/);
+  // NULL is unlimited. A 0 here would block everything, so the distinction
+  // has to survive into the seed.
+  assert.match(sql, /'enterprise', NULL, NULL, 'month'/);
+  assert.match(sql, /ON CONFLICT \(plan\) DO NOTHING/);
+});
+
+test("every workspace has a plan and it references a real one", async () => {
+  const q = fakeQuery();
+  await runTenancyMigrations(q);
+  const sql = q.transactions[0].map((statement) => statement.text).join("\n");
+
+  assert.match(sql, /ALTER TABLE ghic_workspaces\s+ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'starter'/);
+  assert.match(sql, /ghic_workspaces_plan_fk/);
+  assert.match(sql, /FOREIGN KEY \(plan\) REFERENCES ghic_plans\(plan\)/);
+});
+
+test("an issue cannot be counted twice in a period", async () => {
+  // Idempotency in the schema rather than in application care: a redelivered
+  // webhook or a re-analysis after an edit cannot bill twice however the
+  // caller behaves. This is what makes "retries do not count twice" a
+  // property rather than a promise.
+  const q = fakeQuery();
+  await runTenancyMigrations(q);
+  const sql = q.transactions[0].map((statement) => statement.text).join("\n");
+
+  assert.match(sql, /CREATE UNIQUE INDEX IF NOT EXISTS ghic_usage_counted_once_idx/);
+  assert.match(
+    sql,
+    /ON ghic_usage_events \(workspace_id, period, repo, issue_number\)\s+WHERE outcome = 'counted'/,
+  );
+});
+
+test("the four attempt outcomes are kept apart", async () => {
+  const q = fakeQuery();
+  await runTenancyMigrations(q);
+  const sql = q.transactions[0].map((statement) => statement.text).join("\n");
+
+  // "Why was I charged" and "why was I not analysed" are answerable from the
+  // same table only if the failed and skipped attempts are recorded too.
+  assert.match(sql, /CHECK \(outcome IN \('counted','failed','skipped','limited'\)\)/);
+  assert.match(sql, /workspace_id TEXT NOT NULL REFERENCES ghic_workspaces\(id\)/);
 });
 
 test("ledger validation remains active when earlier tenancy versions already exist", async () => {

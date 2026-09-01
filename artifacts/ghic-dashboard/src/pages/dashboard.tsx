@@ -18,6 +18,7 @@ import { Link } from "wouter";
 
 import { ConnectGitHub, useNothingConnected } from "@/components/connect-github";
 import { DataError } from "@/components/data-state";
+import { UsagePanel } from "@/components/usage-panel";
 import {
   Grid,
   PageContent,
@@ -95,6 +96,11 @@ export default function Dashboard() {
         </PageContent>
       ) : (
       <PageContent className="flex flex-col gap-8 w-full">
+        {/* Above the metrics on purpose. A workspace whose analysis has
+            stopped needs to learn that before it reads a chart of how
+            little happened this month and concludes the product is
+            broken. */}
+        <UsagePanel />
         {overview.isLoading ? (
           <div className="h-32 bg-muted animate-pulse border border-border" />
         ) : overview.isError ? (

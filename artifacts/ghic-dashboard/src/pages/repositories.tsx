@@ -7,6 +7,7 @@ import { Github, RefreshCw, Search } from "lucide-react";
 import { Link } from "wouter";
 
 import { ConnectGitHubPanel } from '@/components/connect-github';
+import { RepositoryLimitNotice } from '@/components/usage-panel';
 import { DataError } from "@/components/data-state";
 import { PageContent, PageHeader, StatusBadge } from "@/components/ui/swiss";
 import { useCurrentAccount, useDashboardDate } from "@/lib/account";
@@ -77,6 +78,12 @@ export default function Repositories() {
             error={createIntent.error?.message ?? null}
           />
         ) : null}
+
+        {/* Shown where the user would go to add one, rather than only at
+            the moment GitHub hands the selection back. Somebody who
+            connected their limit last week and returns to add another has
+            no other way to find out why the count stopped moving. */}
+        <RepositoryLimitNotice />
 
         <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-3">
           <label className="relative">

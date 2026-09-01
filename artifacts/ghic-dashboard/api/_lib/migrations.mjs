@@ -2,6 +2,7 @@ const DEFAULT_WORKSPACE_ID = "ghic-default-workspace";
 const VERSION = 2;
 const OWNERSHIP_VERSION = 3;
 const LEDGER_VALIDATION_VERSION = 4;
+const PLAN_VERSION = 5;
 
 // This migration is additive and deliberately leaves the legacy singleton
 // columns/constraints in place for the expand-and-contract rollout.
@@ -636,8 +637,71 @@ export async function runTenancyMigrations(q) {
        WHERE NOT EXISTS (
          SELECT 1 FROM ghic_schema_migrations WHERE version = ${LEDGER_VALIDATION_VERSION}
        )`,
+
+    // ---- v5: plans and usage ------------------------------------------
+    //
+    // Limits live in a table rather than in code because two services
+    // enforce them: the Hub refuses a repository connection, the Python
+    // backend refuses an analysis. The same numbers written twice in two
+    // languages drift, and the direction they drift in is a customer being
+    // charged for one thing and served another.
+    q`CREATE TABLE IF NOT EXISTS ghic_plans (
+      plan TEXT PRIMARY KEY,
+      max_repositories INTEGER,
+      max_issues_per_period INTEGER,
+      period TEXT NOT NULL DEFAULT 'month',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`,
+    // NULL means unlimited, not zero. A plan row with 0 would block
+    // everything, so the distinction has to survive into every reader.
+    q`INSERT INTO ghic_plans (plan, max_repositories, max_issues_per_period, period)
+       VALUES ('starter', 1, 500, 'month'),
+              ('pro', 10, 10000, 'month'),
+              ('enterprise', NULL, NULL, 'month')
+       ON CONFLICT (plan) DO NOTHING`,
+
+    q`ALTER TABLE ghic_workspaces
+       ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'starter'`,
+    q`DO $$ BEGIN
+         IF NOT EXISTS (
+           SELECT 1 FROM pg_constraint WHERE conname = 'ghic_workspaces_plan_fk'
+         ) THEN
+           ALTER TABLE ghic_workspaces
+             ADD CONSTRAINT ghic_workspaces_plan_fk
+             FOREIGN KEY (plan) REFERENCES ghic_plans(plan);
+         END IF;
+       END $$`,
+
+    // One row per analysis attempt. `outcome` keeps the four kinds apart so
+    // "why was I charged" and "why was I not analysed" are answerable from
+    // the same place.
+    q`CREATE TABLE IF NOT EXISTS ghic_usage_events (
+      id BIGSERIAL PRIMARY KEY,
+      workspace_id TEXT NOT NULL REFERENCES ghic_workspaces(id),
+      period TEXT NOT NULL,
+      repo TEXT NOT NULL,
+      issue_number INTEGER NOT NULL,
+      outcome TEXT NOT NULL CHECK (outcome IN ('counted','failed','skipped','limited')),
+      reason TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`,
+    // Idempotency lives in the schema, not in application care. An issue can
+    // be counted at most once per period, so a redelivered webhook or a
+    // re-analysis after an edit cannot bill twice however the caller behaves.
+    // Non-counted attempts are audit rows and are deliberately unconstrained.
+    q`CREATE UNIQUE INDEX IF NOT EXISTS ghic_usage_counted_once_idx
+       ON ghic_usage_events (workspace_id, period, repo, issue_number)
+       WHERE outcome = 'counted'`,
+    q`CREATE INDEX IF NOT EXISTS ghic_usage_workspace_period_idx
+       ON ghic_usage_events (workspace_id, period, outcome)`,
+
+    q`INSERT INTO ghic_schema_migrations (version)
+       SELECT ${PLAN_VERSION}
+       WHERE NOT EXISTS (
+         SELECT 1 FROM ghic_schema_migrations WHERE version = ${PLAN_VERSION}
+       )`,
   ];
   await q.transaction(statements);
 }
 
-export { DEFAULT_WORKSPACE_ID };
+export { DEFAULT_WORKSPACE_ID, PLAN_VERSION };

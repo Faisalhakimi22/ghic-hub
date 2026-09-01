@@ -37,6 +37,16 @@ export interface InstallationResult {
   accountLogin?: string | null;
   repositoryCount?: number;
   setupAction?: string;
+  /**
+   * Reported, not thrown. The connection succeeded; some repositories were
+   * simply not taken up because the plan's limit was already met. A user
+   * who ticked twelve boxes on GitHub and got one repository has to be told
+   * which and why, rather than left to notice the difference later.
+   */
+  plan?: string;
+  repositoryLimit?: number | null;
+  refusedRepositories?: string[];
+  limitReached?: boolean;
 }
 
 export interface InstallationIntent {

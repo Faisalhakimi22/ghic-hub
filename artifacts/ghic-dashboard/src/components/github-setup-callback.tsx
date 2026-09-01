@@ -173,6 +173,9 @@ export function GitHubSetupCallback({
                 result?.accountLogin ? ` from ${result.accountLogin}` : ''
               }. Indexing status appears as GHIC processes them.`
       }
+      notice={
+        result?.limitReached ? <PlanLimitNotice result={result} /> : null
+      }
       action={
         <button
           onClick={() => {
@@ -187,15 +190,54 @@ export function GitHubSetupCallback({
   );
 }
 
+/**
+ * What GitHub granted but the plan did not take up.
+ *
+ * Named rather than counted. "3 repositories were not connected" leaves the
+ * user to work out which three, and the one they care about is exactly the
+ * one they will assume was included.
+ */
+function PlanLimitNotice({ result }: { result: InstallationResult }) {
+  const refused = result.refusedRepositories ?? [];
+  if (!refused.length) return null;
+  return (
+    <div className="border border-amber-500/40 bg-amber-500/5 p-3 flex flex-col gap-2">
+      <span className="flex items-center gap-1.5 text-[10px] font-display tracking-widest uppercase font-bold">
+        <TriangleAlert className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+        Plan limit reached
+      </span>
+      <p className="text-xs text-muted-foreground leading-relaxed">
+        The <strong>{result.plan}</strong> plan connects{' '}
+        {result.repositoryLimit} repositor
+        {result.repositoryLimit === 1 ? 'y' : 'ies'}. GHIC kept your existing
+        selection and did not connect:
+      </p>
+      <ul className="text-xs font-mono flex flex-col gap-0.5 max-h-32 overflow-y-auto">
+        {refused.map((name) => (
+          <li key={name} className="truncate">
+            {name}
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs text-muted-foreground leading-relaxed">
+        Nothing was removed from GitHub. Connect them by upgrading, or by
+        disconnecting a repository you no longer need.
+      </p>
+    </div>
+  );
+}
+
 function Panel({
   icon,
   title,
   body,
+  notice,
   action,
 }: {
   icon: React.ReactNode;
   title: string;
   body: string;
+  notice?: React.ReactNode;
   action?: React.ReactNode;
 }) {
   return (
@@ -208,6 +250,7 @@ function Panel({
           {title}
         </h1>
         <p className="text-sm text-muted-foreground leading-relaxed">{body}</p>
+        {notice}
         {action}
       </div>
     </div>

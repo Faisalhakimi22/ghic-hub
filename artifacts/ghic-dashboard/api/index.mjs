@@ -28,6 +28,7 @@ import {
   createGitHubInstallationIntent,
   refreshGitHubInstallation,
 } from "./_lib/github-installations.mjs";
+import { usageForWorkspace } from "./_lib/plans.mjs";
 import {
   activityFromLedgerRow,
   buildDashboardOverview,
@@ -267,6 +268,7 @@ const productionDependencies = {
   completeGitHubInstallation,
   disconnectGitHubInstallation,
   refreshGitHubInstallation,
+  usageForWorkspace,
 };
 
 export function createHandler(overrides = {}) {
@@ -482,6 +484,8 @@ export function createHandler(overrides = {}) {
         body = (await overview(viewer)).recentActivity;
       } else if (path === "dashboard/alerts") {
         body = (await overview(viewer)).alerts;
+      } else if (path === "usage") {
+        body = await dependencies.usageForWorkspace(viewer.workspaceId);
       } else if (path === "repositories") {
         body = await dependencies.readRepositories({
           workspaceId: viewer.workspaceId,
