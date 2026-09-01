@@ -160,6 +160,8 @@ export interface Repository {
   engineeringIntelligenceStatus: string;
   webhookStatus: string;
   installationStatus: string;
+  /** Current GitHub App access state, independent from repository indexing. */
+  githubAccessStatus?: string;
   /** True when a live GitHub App installation currently grants GHIC access. */
   connected?: boolean;
   /** @nullable */
@@ -1077,4 +1079,3 @@ repositoryId?: string;
 startDate?: string;
 endDate?: string;
 };
-
