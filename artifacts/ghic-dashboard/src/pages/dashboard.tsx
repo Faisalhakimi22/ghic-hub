@@ -18,6 +18,7 @@ import { Link } from "wouter";
 
 import { ConnectGitHub, useNothingConnected } from "@/components/connect-github";
 import { DataError } from "@/components/data-state";
+import { removedAnalyses, useUsage } from "@/lib/usage";
 import {
   Grid,
   PageContent,
@@ -78,6 +79,10 @@ export default function Dashboard() {
     query: { queryKey: getGetDashboardOverviewQueryKey() },
   });
   const formatDate = useDashboardDate();
+  // Read-only, and shared with the usage panel's cache, so this costs no
+  // extra request on a dashboard that has already been opened.
+  const usage = useUsage();
+  const removed = removedAnalyses(usage.data);
 
   return (
     <div className="flex flex-col min-h-full">
@@ -132,6 +137,15 @@ export default function Dashboard() {
                   icon={Bug}
                 />
               </div>
+              {/* Only when the counts actually disagree. "Issues Scored: 0"
+                  beside a period that counted usage reads as a billing
+                  error unless the reason is on the same screen. */}
+              {removed > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  Excludes analyses for repositories that have been
+                  disconnected — those records are removed on uninstall.
+                </p>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
                 <BentoCard
                   label="Full Analyses"

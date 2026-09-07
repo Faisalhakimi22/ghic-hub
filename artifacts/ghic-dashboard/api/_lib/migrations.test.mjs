@@ -851,3 +851,37 @@ test("the billing migration records its version so it is applied once", async ()
     .filter((text) => /INSERT INTO ghic_schema_migrations/.test(text));
   assert.ok(inserts.some((text) => /NOT EXISTS/.test(text)));
 });
+
+test("v8 creates the purge audit table with no foreign keys", async () => {
+  const q = fakeQuery();
+  await runTenancyMigrations(q);
+  const text = q.transactions[0].map((statement) => statement.text).join("\n");
+
+  assert.match(text, /CREATE TABLE IF NOT EXISTS ghic_purge_events/);
+
+  // No REFERENCES anywhere in this table. installation_id names a row the
+  // same operation deletes, and a workspace_id reference would later block
+  // deleting a workspace. An audit row has to outlive what it describes.
+  const table = text.slice(
+    text.indexOf("CREATE TABLE IF NOT EXISTS ghic_purge_events"),
+  );
+  const body = table.slice(0, table.indexOf(")`") + 1);
+  assert.ok(!/REFERENCES/i.test(body), "purge audit must not carry a foreign key");
+
+  assert.match(text, /ghic_purge_events_workspace_idx/);
+  assert.match(text, /ghic_purge_events_installation_idx/);
+});
+
+test("no two migrations claim the same version", async () => {
+  // Billing shipped as version 7 while the ownership contract already used
+  // it. Both recorded into the same registry row, so whichever ran second
+  // silently skipped its own INSERT and the contract's guard was satisfied
+  // by a row that had nothing to do with it.
+  const q = fakeQuery();
+  await runTenancyMigrations(q);
+  const recorded = q.transactions[0]
+    .map((statement) => statement.text)
+    .filter((text) => /INSERT INTO ghic_schema_migrations/.test(text))
+    .map((text) => Number(text.match(/version = (\d+)/)[1]));
+  assert.equal(new Set(recorded).size, recorded.length, `duplicate version in ${recorded}`);
+});

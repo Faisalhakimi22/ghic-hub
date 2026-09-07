@@ -257,3 +257,90 @@ test("usage counts only active repositories", async () => {
   assert.equal(usage.repositories.used, 1);
   assert.equal(usage.repositories.remaining, 0);
 });
+
+// ---------------------------------------------------------------------------
+// Retained analysis records
+//
+// An uninstall deletes prediction records but never usage, so these two
+// numbers diverge legitimately. The dashboard needs both to explain itself
+// instead of showing a bare zero next to a charge.
+// ---------------------------------------------------------------------------
+const ledger = (n) => ["FROM ghic_ledger", [{ n }]];
+
+test("retained records are reported alongside usage", async () => {
+  const deps = {
+    database: stubDatabase([
+      starter,
+      ["FROM ghic_usage_events", [{ outcome: "counted", n: 3 }]],
+      ["FROM ghic_github_repositories", [{ n: 1 }]],
+      ledger(3),
+    ]),
+  };
+  const usage = await usageForWorkspace("ws-1", deps, new Date("2026-09-04T00:00:00Z"));
+  assert.equal(usage.issues.used, 3);
+  assert.equal(usage.analysesRetained, 3);
+});
+
+test("a purge shows as fewer records than counted usage", async () => {
+  const deps = {
+    database: stubDatabase([
+      starter,
+      ["FROM ghic_usage_events", [{ outcome: "counted", n: 1 }]],
+      ["FROM ghic_github_repositories", [{ n: 1 }]],
+      ledger(0),
+    ]),
+  };
+  const usage = await usageForWorkspace("ws-1", deps, new Date("2026-09-04T00:00:00Z"));
+  assert.equal(usage.issues.used, 1);
+  assert.equal(usage.analysesRetained, 0);
+});
+
+test("retained records never exceed counted usage", async () => {
+  // More records than usage would mean work was delivered free. That is a
+  // different bug, and this number must not quietly absorb it.
+  const deps = {
+    database: stubDatabase([
+      starter,
+      ["FROM ghic_usage_events", [{ outcome: "counted", n: 2 }]],
+      ["FROM ghic_github_repositories", [{ n: 1 }]],
+      ledger(9),
+    ]),
+  };
+  const usage = await usageForWorkspace("ws-1", deps, new Date("2026-09-04T00:00:00Z"));
+  assert.equal(usage.analysesRetained, 2);
+});
+
+test("an unreadable ledger leaves usage correct and the explanation quiet", async () => {
+  // The retained count exists to explain a number, not to produce one.
+  const deps = {
+    database: stubDatabase([
+      starter,
+      ["FROM ghic_usage_events", [{ outcome: "counted", n: 4 }]],
+      ["FROM ghic_github_repositories", [{ n: 1 }]],
+    ]),
+  };
+  const usage = await usageForWorkspace("ws-1", deps, new Date("2026-09-04T00:00:00Z"));
+  assert.equal(usage.issues.used, 4);
+  assert.equal(usage.analysesRetained, null);
+});
+
+test("a daily plan matches records to the day, not the month", async () => {
+  // Starter bills per day. Formatting the period as a month would compare
+  // four weeks of records against one day of usage.
+  let captured = null;
+  const deps = {
+    database: async () => (strings, ...values) => {
+      const sql = strings.join(" ");
+      if (sql.includes("FROM ghic_workspaces w")) {
+        return [{ plan: "starter", max_repositories: 1, max_issues_per_period: 50, period: "day" }];
+      }
+      if (sql.includes("FROM ghic_usage_events")) return [{ outcome: "counted", n: 1 }];
+      if (sql.includes("FROM ghic_github_repositories")) return [{ n: 1 }];
+      captured = values;
+      return [{ n: 1 }];
+    },
+  };
+  await usageForWorkspace("ws-1", deps, new Date("2026-09-04T12:00:00Z"));
+  assert.ok(captured.includes("YYYY-MM-DD"));
+  assert.ok(captured.includes("2026-09-04"));
+});

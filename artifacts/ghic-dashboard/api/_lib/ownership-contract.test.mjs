@@ -63,6 +63,24 @@ async function versions(db) {
   return (await db.query("SELECT version FROM ghic_schema_migrations ORDER BY version")).rows.map((r) => r.version);
 }
 
+/**
+ * The migrations that must have been applied, without pinning the ones that
+ * have not been written yet.
+ *
+ * Pinning the whole list meant every new migration broke these tests for a
+ * reason unrelated to what they check. Uniqueness is asserted too, because
+ * two migrations sharing a version is exactly the defect this replaced:
+ * billing shipped as 7 alongside the ownership contract, so one of them
+ * silently skipped its own INSERT.
+ */
+async function assertApplied(db, required) {
+  const applied = await versions(db);
+  assert.equal(new Set(applied).size, applied.length, `duplicate version in ${applied}`);
+  for (const version of required) {
+    assert.ok(applied.includes(version), `migration ${version} not applied: ${applied}`);
+  }
+}
+
 async function protectedData(db) {
   return {
     chunks: (await db.query("SELECT id, repo, path, workspace_id, md5(embedding::text) AS hash, vector_dims(embedding) AS dimensions FROM ghic_repo_chunks ORDER BY id")).rows,
@@ -85,7 +103,7 @@ test("real SQL validates ownership, preserves vectors/SHA/history, and records v
   ]);
   const before = await protectedData(db);
   await migrate();
-  assert.deepEqual(await versions(db), [2, 3, 4, 5, 6, 7]);
+  await assertApplied(db, [2, 3, 4, 5, 6, 7]);
   assert.deepEqual(await protectedData(db), before);
   assert.deepEqual(before.type, [{ type: "vector(1536)" }]);
   const constraints = (await db.query(`SELECT conname, convalidated FROM pg_constraint WHERE conname IN
@@ -95,7 +113,7 @@ test("real SQL validates ownership, preserves vectors/SHA/history, and records v
   assert.deepEqual((await db.query("SELECT max_repositories, max_issues_per_period, period FROM ghic_plans WHERE plan = 'starter'")).rows,
     [{ max_repositories: 1, max_issues_per_period: 50, period: "day" }]);
   await migrate();
-  assert.deepEqual(await versions(db), [2, 3, 4, 5, 6, 7]);
+  await assertApplied(db, [2, 3, 4, 5, 6, 7]);
   assert.deepEqual(await protectedData(db), before);
   assert.equal((await db.query("SELECT is_nullable FROM information_schema.columns WHERE table_name = 'ghic_ledger' AND column_name = 'workspace_id'")).rows[0].is_nullable, "YES");
 });
@@ -124,7 +142,7 @@ test("failed real migration can retry after an operator corrects only the dispos
   await assertRolledBack(db);
   await db.exec("UPDATE ghic_ledger SET workspace_id = 'a'");
   await migrate();
-  assert.deepEqual(await versions(db), [2, 3, 4, 5, 6, 7]);
+  await assertApplied(db, [2, 3, 4, 5, 6, 7]);
 });
 
 for (const [name, options] of [
@@ -164,7 +182,7 @@ test("Python tables created after v7 receive validated constraints on the next b
   await migrate();
   await pythonTables(db);
   await migrate();
-  assert.deepEqual(await versions(db), [2, 3, 4, 5, 6, 7]);
+  await assertApplied(db, [2, 3, 4, 5, 6, 7]);
   assert.equal((await db.query("SELECT count(*)::int AS n FROM pg_constraint WHERE conname IN ('ghic_ledger_workspace_fk','ghic_state_repository_workspace_fk','ghic_chunks_repository_workspace_fk') AND convalidated")).rows[0].n, 3);
 });
 
@@ -176,7 +194,7 @@ test("late-created ledger cannot bypass attribution validation after v7 was reco
   const before = await protectedData(db);
   await assert.rejects(migrate, /conflicting ledger attribution/);
   assert.deepEqual(await protectedData(db), before);
-  assert.deepEqual(await versions(db), [2, 3, 4, 5, 6, 7]);
+  await assertApplied(db, [2, 3, 4, 5, 6, 7]);
   assert.equal((await db.query("SELECT count(*)::int AS n FROM pg_constraint WHERE conname = 'ghic_ledger_workspace_fk'")).rows[0].n, 0);
 });
 
@@ -201,4 +219,37 @@ test("a same-named constraint pointing at the wrong parent cannot satisfy the co
       FOREIGN KEY(workspace_id) REFERENCES unrelated_workspaces(id);`);
   await assert.rejects(migrate, /ledger constraint missing or invalid/);
   assert.deepEqual(await versions(db), [2, 3, 4, 5]);
+});
+
+test("billing and purge-audit tables are created by the real SQL", async (t) => {
+  const { db, migrate } = await fixture(t);
+  await migrate();
+
+  // Executed against real PostgreSQL, so a column type or index the fake
+  // would have accepted still has to be valid here.
+  await assertApplied(db, [7, 8, 9]);
+  for (const table of [
+    "ghic_billing_subscriptions",
+    "ghic_billing_events",
+    "ghic_purge_events",
+  ]) {
+    const { rows } = await db.query("SELECT to_regclass($1) AS t", [`public.${table}`]);
+    assert.ok(rows[0].t, `${table} was not created`);
+  }
+
+  // The audit row must outlive the installation it describes, so it holds
+  // no foreign key that could block or cascade.
+  const { rows: fks } = await db.query(`
+    SELECT count(*)::int AS n FROM pg_constraint
+    WHERE conrelid = 'public.ghic_purge_events'::regclass AND contype = 'f'`);
+  assert.equal(fks[0].n, 0);
+
+  // A redelivered Stripe event cannot be applied twice: the primary key
+  // refuses it in the schema rather than in application care.
+  await db.query(
+    "INSERT INTO ghic_billing_events(event_id, type, to_plan) VALUES ('evt_1','x','pro')",
+  );
+  await assert.rejects(
+    db.query("INSERT INTO ghic_billing_events(event_id, type, to_plan) VALUES ('evt_1','x','pro')"),
+  );
 });

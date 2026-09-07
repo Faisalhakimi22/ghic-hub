@@ -80,6 +80,38 @@ export function periodKey(period = "month", now = new Date()) {
  * backend's per-workspace advisory lock, and a second writer outside it
  * would be a second place that can sell the same slot.
  */
+/**
+ * Prediction records still held for this period.
+ *
+ * Uninstalling the App deletes the analysis records for the repositories it
+ * owned, and deliberately never touches usage. The two numbers therefore
+ * diverge legitimately, and the dashboard needs both to explain itself
+ * rather than showing a bare zero next to a charge.
+ *
+ * Returns null rather than throwing. This exists to explain a number, not
+ * to produce one: if the ledger cannot be read, usage is still correct and
+ * still worth showing, and the explanation simply stays quiet.
+ */
+async function retainedAnalyses(q, id, period, issuesUsed) {
+  // The period key is YYYY-MM-DD on a daily plan and YYYY-MM on a monthly
+  // one, so the format has to follow it. Formatting a daily period as a
+  // month would count four weeks of records against one day of usage and
+  // report the discrepancy backwards.
+  const format = period.length === 10 ? "YYYY-MM-DD" : "YYYY-MM";
+  try {
+    const rows = await q`
+      SELECT count(*)::int AS n FROM ghic_ledger
+      WHERE workspace_id = ${id}
+        AND data->>'type' = 'prediction'
+        AND to_char(created_at AT TIME ZONE 'UTC', ${format}) = ${period}`;
+    // Never above `used`: more records than usage would mean work was
+    // delivered free, a different bug that this number must not absorb.
+    return Math.min(issuesUsed, Number(rows[0]?.n || 0));
+  } catch {
+    return null;
+  }
+}
+
 export async function usageForWorkspace(workspaceId, deps = null, now = new Date()) {
   const id = String(workspaceId || "").trim();
   const plan = await planForWorkspace(id, deps);
@@ -120,6 +152,7 @@ export async function usageForWorkspace(workspaceId, deps = null, now = new Date
             : Math.max(0, plan.maxRepositories - reposUsed),
       },
       outcomes,
+      analysesRetained: await retainedAnalyses(q, id, period, issuesUsed),
     };
   } catch (error) {
     throw planUnavailable("Workspace usage could not be read.", error);

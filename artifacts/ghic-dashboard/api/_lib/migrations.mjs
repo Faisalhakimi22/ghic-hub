@@ -6,7 +6,9 @@ const OWNERSHIP_VERSION = 3;
 const LEDGER_VALIDATION_VERSION = 4;
 const PLAN_VERSION = 5;
 const PLAN_POLICY_VERSION = 6;
-const BILLING_VERSION = 7;
+// 7 belongs to the ownership contract, whose DO block hardcodes it.
+const BILLING_VERSION = 8;
+const PURGE_AUDIT_VERSION = 9;
 
 // This migration is additive and deliberately leaves the legacy singleton
 // columns/constraints in place for the expand-and-contract rollout.
@@ -736,7 +738,8 @@ export async function runTenancyMigrations(q) {
          SELECT 1 FROM ghic_schema_migrations WHERE version = ${PLAN_POLICY_VERSION}
        )`,
 
-    // ---- v7: billing ---------------------------------------------------
+    ...ownershipContractStatements(q),
+    // ---- v8: billing ---------------------------------------------------
     // What a workspace is paying for, kept separate from what it is allowed
     // to do. `ghic_workspaces.plan` stays the single thing every limit
     // reader consults; this table records why that plan is what it is. A
@@ -792,9 +795,47 @@ export async function runTenancyMigrations(q) {
        WHERE NOT EXISTS (
          SELECT 1 FROM ghic_schema_migrations WHERE version = ${BILLING_VERSION}
        )`,
-    ...ownershipContractStatements(q),
+
+    // ---- v9: purge audit ------------------------------------------------
+    // Uninstalling the App deletes the prediction records for the
+    // repositories it owned. That is intended -- but until now it happened
+    // silently, and reconstructing one such cleanup afterwards took reading
+    // a sequence counter to notice that 39 rows had ever existed.
+    //
+    // No foreign keys, on purpose. installation_id names a row the same
+    // operation deletes, and a workspace_id reference would later block
+    // deleting a workspace. An audit row has to outlive what it describes,
+    // which is the same reason ghic_billing_events records plan names as
+    // plain text rather than referencing ghic_plans.
+    q`CREATE TABLE IF NOT EXISTS ghic_purge_events (
+      id BIGSERIAL PRIMARY KEY,
+      reason TEXT NOT NULL,
+      installation_id BIGINT,
+      workspace_id TEXT,
+      repo TEXT,
+      counts JSONB NOT NULL,
+      total INTEGER NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`,
+    q`CREATE INDEX IF NOT EXISTS ghic_purge_events_workspace_idx
+       ON ghic_purge_events (workspace_id, created_at DESC)`,
+    q`CREATE INDEX IF NOT EXISTS ghic_purge_events_installation_idx
+       ON ghic_purge_events (installation_id, created_at DESC)`,
+
+    q`INSERT INTO ghic_schema_migrations (version)
+       SELECT ${PURGE_AUDIT_VERSION}
+       WHERE NOT EXISTS (
+         SELECT 1 FROM ghic_schema_migrations WHERE version = ${PURGE_AUDIT_VERSION}
+       )`,
+
   ];
   await q.transaction(statements);
 }
 
-export { DEFAULT_WORKSPACE_ID, PLAN_VERSION, PLAN_POLICY_VERSION, BILLING_VERSION };
+export {
+  DEFAULT_WORKSPACE_ID,
+  PLAN_VERSION,
+  PLAN_POLICY_VERSION,
+  BILLING_VERSION,
+  PURGE_AUDIT_VERSION,
+};

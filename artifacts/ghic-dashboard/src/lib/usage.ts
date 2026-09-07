@@ -25,6 +25,15 @@ export interface WorkspaceUsage {
   issues: UsageMeter;
   repositories: UsageMeter;
   outcomes: Record<string, number>;
+  /**
+   * Prediction records still held for this period.
+   *
+   * Below `used` when a repository has been disconnected: uninstalling the
+   * App deletes its analysis records but deliberately never touches usage,
+   * because work already delivered is not refunded when somebody
+   * disconnects a repository afterwards.
+   */
+  analysesRetained?: number;
 }
 
 export const usageKey = ['workspace', 'usage'] as const;
@@ -81,4 +90,16 @@ export function formatPeriod(period: string): string {
     year: 'numeric',
     timeZone: 'UTC',
   });
+}
+
+/**
+ * How many analyses were counted but no longer have a record.
+ *
+ * Zero in the ordinary case, so the caller can stay silent. Only a purge
+ * makes this non-zero, and it is the difference a customer would otherwise
+ * read as "charged for something that never happened".
+ */
+export function removedAnalyses(usage: WorkspaceUsage | undefined): number {
+  if (!usage || usage.analysesRetained == null) return 0;
+  return Math.max(0, usage.issues.used - usage.analysesRetained);
 }

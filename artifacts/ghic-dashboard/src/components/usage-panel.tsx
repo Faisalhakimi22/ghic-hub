@@ -1,11 +1,12 @@
 import React from 'react';
 import { Link } from 'wouter';
-import { AlertTriangle, FolderGit2, ScanSearch } from 'lucide-react';
+import { AlertTriangle, Archive, FolderGit2, ScanSearch } from 'lucide-react';
 
 import {
   formatPeriod,
   meterLevel,
   meterPercent,
+  removedAnalyses,
   useUsage,
   type MeterLevel,
   type UsageMeter,
@@ -135,6 +136,7 @@ export function UsagePanel() {
   const issues = meterLevel(data.issues);
   const repositories = meterLevel(data.repositories);
   const stalled = issues === 'exhausted';
+  const removed = removedAnalyses(data);
 
   return (
     <div className="border border-border bg-card p-5 sm:p-6 flex flex-col gap-5 min-w-0">
@@ -166,6 +168,27 @@ export function UsagePanel() {
           unit="repositories"
         />
       </div>
+
+      {/* Only speaks when the two numbers actually disagree. A permanent
+          note about uninstall behaviour would be noise on every workspace
+          that has never uninstalled anything. */}
+      {removed > 0 && (
+        <div className="flex items-start gap-2.5 border border-border bg-muted/40 p-3">
+          <Archive className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+          <div className="text-xs leading-relaxed min-w-0">
+            <p className="font-bold">Some analysis records have been removed</p>
+            <p className="text-muted-foreground">
+              This period counted {data.issues.used.toLocaleString()}{' '}
+              {data.issues.used === 1 ? 'analysis' : 'analyses'}, but{' '}
+              {(data.analysesRetained ?? 0).toLocaleString()}{' '}
+              {(data.analysesRetained ?? 0) === 1 ? 'record remains' : 'records remain'}.
+              Records for a repository are deleted when its GitHub App
+              installation is removed. Usage for work already delivered is
+              not refunded.
+            </p>
+          </div>
+        </div>
+      )}
 
       {stalled && (
         <div className="flex items-start gap-2.5 border border-destructive/40 bg-destructive/5 p-3">
