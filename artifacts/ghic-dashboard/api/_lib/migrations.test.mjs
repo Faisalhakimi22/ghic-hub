@@ -228,6 +228,25 @@ test("plans carry their limits in the database, not in either service", async ()
   // has to survive into the seed.
   assert.match(sql, /'enterprise', NULL, NULL, 'month'/);
   assert.match(sql, /ON CONFLICT \(plan\) DO NOTHING/);
+  assert.match(sql, /UPDATE ghic_plans[\s\S]*max_issues_per_period = 50[\s\S]*period = 'day'/);
+  assert.match(sql, /plan migration validation failed: starter policy/);
+  assert.match(sql, /version = 6/);
+});
+
+test("the launch plan correction is idempotent and recorded after validation", async () => {
+  const q = fakeQuery();
+  await runTenancyMigrations(q);
+  const statements = q.transactions[0].map((statement) => statement.text);
+  const update = statements.findIndex((sql) => sql.startsWith("UPDATE ghic_plans"));
+  const validation = statements.findIndex((sql) => sql.includes("plan migration validation failed"));
+  const recorded = statements.findIndex(
+    (sql) => sql.startsWith("INSERT INTO ghic_schema_migrations") && sql.includes("6"),
+  );
+
+  assert.ok(update >= 0);
+  assert.ok(validation > update);
+  assert.ok(recorded > validation);
+  assert.match(statements[update], /NOT EXISTS[\s\S]*version = 6/);
 });
 
 test("every workspace has a plan and it references a real one", async () => {
@@ -397,7 +416,7 @@ test("the sweep is confined to the one-time single-tenant expand", async () => {
   );
 });
 
-test("indexed repositories with no connected repository do not abort the migration", async () => {
+test("legacy v3 defers repository constraint validation for out-of-band index rows", async () => {
   const { sql } = await migrationSql();
 
   // Out-of-band indexing legitimately produces state and chunks for
@@ -498,7 +517,7 @@ test("version literals inside DO blocks stay in step with the exported constants
   }
   // The literals exist only because parameters cannot be used here. This is
   // the guard against them drifting as the version constants change.
-  assert.deepEqual([...referenced].sort(), [2, 3, 4]);
+  assert.deepEqual([...referenced].sort(), [2, 3, 4, 6, 7]);
 });
 
 test("hardcoded workspace ids in DO blocks match the exported constant", async () => {
@@ -804,4 +823,31 @@ test("v3 validations that passed the production audit are unchanged", async () =
       "ledger ownership validation failed: workspace attribution is conflicting or incomplete",
     ),
   );
+});
+
+test("v7 creates the billing tables with idempotency in the schema", async () => {
+  const q = fakeQuery();
+  await runTenancyMigrations(q);
+  const text = q.transactions[0].map((statement) => statement.text).join("\n");
+
+  assert.match(text, /CREATE TABLE IF NOT EXISTS ghic_billing_subscriptions/);
+  assert.match(text, /CREATE TABLE IF NOT EXISTS ghic_billing_events/);
+
+  // event_id is the primary key, so a Stripe redelivery is a no-op in the
+  // schema rather than something application code has to remember.
+  assert.match(text, /ghic_billing_events \(\s*event_id TEXT PRIMARY KEY/);
+
+  // One subscription and one customer belong to one workspace. Without
+  // these a mis-routed webhook could upgrade two workspaces on one payment.
+  assert.match(text, /UNIQUE INDEX IF NOT EXISTS ghic_billing_subscription_id_idx/);
+  assert.match(text, /UNIQUE INDEX IF NOT EXISTS ghic_billing_customer_id_idx/);
+});
+
+test("the billing migration records its version so it is applied once", async () => {
+  const q = fakeQuery();
+  await runTenancyMigrations(q);
+  const inserts = q.transactions[0]
+    .map((statement) => statement.text)
+    .filter((text) => /INSERT INTO ghic_schema_migrations/.test(text));
+  assert.ok(inserts.some((text) => /NOT EXISTS/.test(text)));
 });

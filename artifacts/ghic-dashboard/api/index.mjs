@@ -29,6 +29,8 @@ import {
   refreshGitHubInstallation,
 } from "./_lib/github-installations.mjs";
 import { usageForWorkspace } from "./_lib/plans.mjs";
+import { billingHistory, subscriptionForWorkspace } from "./_lib/billing.mjs";
+import { createCheckoutSession, createPortalSession } from "./_lib/stripe.mjs";
 import {
   activityFromLedgerRow,
   buildDashboardOverview,
@@ -86,6 +88,21 @@ function parsePath(req) {
     .replace(/^\/+/, "")
     .replace(/\/$/, "");
   return { url, path, segments: path.split("/").filter(Boolean) };
+}
+
+/**
+ * Absolute origin for the URLs Stripe redirects back to.
+ *
+ * `DASHBOARD_URL` wins when it is set. The Host header is attacker-supplied
+ * in principle, and although a forged one could only redirect the person who
+ * forged it, a return URL is not the place to start trusting request headers.
+ */
+function dashboardOrigin(req, url) {
+  const configured = String(process.env.DASHBOARD_URL || "").trim().replace(/\/$/, "");
+  if (configured) return configured;
+  const proto = req.headers["x-forwarded-proto"] || "https";
+  const host = req.headers["x-forwarded-host"] || req.headers.host || url.host;
+  return `${proto}://${host}`;
 }
 
 async function readJson(req) {
@@ -223,7 +240,9 @@ function errorPayload(error) {
         error:
           error.code === "github_app_not_configured"
             ? error.message
-            : "Dashboard data is temporarily unavailable because PostgreSQL could not be queried.",
+            : error.code === "workspace_plan_unavailable"
+              ? "Workspace plan and usage could not be verified. Try again later."
+              : "Dashboard data is temporarily unavailable because PostgreSQL could not be queried.",
       },
     };
   }
@@ -269,6 +288,10 @@ const productionDependencies = {
   disconnectGitHubInstallation,
   refreshGitHubInstallation,
   usageForWorkspace,
+  subscriptionForWorkspace,
+  billingHistory,
+  createCheckoutSession,
+  createPortalSession,
 };
 
 export function createHandler(overrides = {}) {
@@ -469,6 +492,41 @@ export function createHandler(overrides = {}) {
         return;
       }
 
+      // Committing a workspace to a recurring charge is an owner action.
+      // Checkout is started server-side so the plan and the workspace come
+      // from the session rather than from anything the browser sent -- the
+      // same reason the usage gate charges the workspace authorization
+      // decided on, not the one the payload claimed.
+      if (path === "billing/checkout" && req.method === "POST") {
+        requireRole(viewer, "owner");
+        const payload = await readJson(req);
+        const plan = String(payload?.plan || "pro").trim();
+        const origin = dashboardOrigin(req, url);
+        res.status(200).json(
+          await dependencies.createCheckoutSession({
+            workspaceId: viewer.workspaceId,
+            plan,
+            customerEmail: viewer.email || null,
+            successUrl: `${origin}/settings?checkout=success`,
+            cancelUrl: `${origin}/settings?checkout=cancelled`,
+          }),
+        );
+        return;
+      }
+
+      if (path === "billing/portal" && req.method === "POST") {
+        requireRole(viewer, "owner");
+        const current = await dependencies.subscriptionForWorkspace(viewer.workspaceId);
+        const origin = dashboardOrigin(req, url);
+        res.status(200).json(
+          await dependencies.createPortalSession({
+            customerId: current.customerId,
+            returnUrl: `${origin}/settings`,
+          }),
+        );
+        return;
+      }
+
       if (req.method !== "GET") {
         throw Object.assign(new Error("This dashboard surface is read-only."), {
           status: 405,
@@ -486,6 +544,13 @@ export function createHandler(overrides = {}) {
         body = (await overview(viewer)).alerts;
       } else if (path === "usage") {
         body = await dependencies.usageForWorkspace(viewer.workspaceId);
+      } else if (path === "billing") {
+        requireRole(viewer, "admin");
+        const [subscription, history] = await Promise.all([
+          dependencies.subscriptionForWorkspace(viewer.workspaceId),
+          dependencies.billingHistory(viewer.workspaceId, 20),
+        ]);
+        body = { ...subscription, history };
       } else if (path === "repositories") {
         body = await dependencies.readRepositories({
           workspaceId: viewer.workspaceId,

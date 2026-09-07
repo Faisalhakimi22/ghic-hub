@@ -4,7 +4,7 @@ Advertised on the marketing site, enforced here.
 
 | Plan | Repositories | Issues | Period |
 |---|---|---|---|
-| starter | 1 | 500 | calendar month, UTC |
+| starter | 1 | 50 | calendar day, UTC |
 | pro | 10 | 10,000 | calendar month, UTC |
 | enterprise | unlimited | unlimited | — |
 
@@ -57,7 +57,7 @@ those is a gate that still pays the bill it exists to stop.
 
 The quota is spent *before* the work, not after. Checking first and
 recording afterwards leaves a window in which two concurrent deliveries both
-see 499 of 500 used and both proceed, and leaves a crash between the work
+see one remaining slot and both proceed, and leaves a crash between the work
 and the record as a free analysis. So an analysis reserves its slot and
 hands it back if the work fails — `usage.release()`, which mirrors the
 idempotency store's `release()` for the same reason: something was marked
@@ -71,15 +71,15 @@ plan with one slot left sells it twice.
 Two things are deliberately *not* charged:
 
 - **A re-score after an issue edit.** The customer paid for that issue when
-  it was opened. A month boundary falling between the open and the edit must
+  it was opened. A period boundary falling between the open and the edit must
   not bill it twice. An exhausted workspace still skips the re-score — free
   model runs are not the alternative.
 - **A refused or failed analysis.** `limited` and `failed` are audit rows.
 
-When a workspace runs out, GHIC comments on the issue **once per period**,
-not on every issue. A workspace that exhausts its plan on the first of the
-month would otherwise get a bot comment on every issue for the rest of it,
-which is the behaviour that gets an App uninstalled.
+When a workspace runs out, GHIC records a sanitized `limited` processing
+event for the Hub. It does not post a quota comment to GitHub: a quota path
+must not bypass the final installation/repository authorization lease used by
+normal GitHub writes.
 
 ## How usage is counted
 
@@ -105,10 +105,11 @@ deliberately unconstrained.
 
 ## Failure behaviour
 
-`planForWorkspace` fails **open** when the plan tables are absent, returning
-unlimited. A quota is a commercial limit, not a security boundary: refusing
-every connection because a migration has not run turns billing into an outage,
-and the fault would be ours rather than the customer's.
+`planForWorkspace` fails **closed** when the workspace plan cannot be read.
+Repository connections and issue analysis stop before expensive work instead
+of silently granting unlimited service. The API reports a distinct
+`workspace_plan_unavailable` operational error rather than misrepresenting the
+workspace as over quota.
 
 The checks that *are* security — workspace membership, installation ownership,
 the authorization gate — keep failing closed, and none of them run through
@@ -122,7 +123,15 @@ reached, and both enforcement points are server-side. The route reads the
 viewer's workspace from their verified session and never from the request,
 because a usage panel is a bill.
 
-## Applied to production
+## Migration state
+
+Migration v6 is the versioned policy correction from Starter's historical
+500/month seed to 50/day. It has not been run against production by this code
+change. The existing `db.mjs` bootstrap runs pending migrations on the first
+database-backed request after a cold start. Do not deploy this change before
+approving the migration. Use the deliberate migration entrypoint with
+before/after verification for a controlled rollout, rather than relying on a
+production request to apply it implicitly.
 
 Migration v5, applied deliberately through `scripts/migrate.mjs` on
 2026-08-23 rather than via the implicit `ready()` cold-start path, with a

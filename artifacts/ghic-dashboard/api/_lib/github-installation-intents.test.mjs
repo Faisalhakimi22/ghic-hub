@@ -29,6 +29,11 @@ function fakeDeps(options = {}) {
   const q = (strings, ...values) => {
     const text = strings.join("?").replace(/\s+/g, " ").trim();
     statements.push({ text, values });
+    if (text.startsWith("SELECT p.plan, p.max_repositories")) {
+      return Promise.resolve([{
+        plan: "starter", max_repositories: 1, max_issues_per_period: 50, period: "day",
+      }]);
+    }
     if (text.startsWith("SELECT firebase_uid, workspace_id")) {
       return Promise.resolve(intent ? [intent] : []);
     }

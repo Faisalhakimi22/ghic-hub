@@ -17,8 +17,8 @@ export default function AuditLogs() {
   return (
     <div className="flex flex-col min-h-full">
       <PageHeader
-        title="Audit Logs"
-        description="Persisted GHIC processing events"
+        title="Processing History"
+        description="Persisted GHIC issue and repository processing events"
       />
       <PageContent>
         {query.isError ? (

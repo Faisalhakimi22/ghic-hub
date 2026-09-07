@@ -2,6 +2,7 @@ import React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Save, ShieldAlert } from "lucide-react";
 
+import { BillingPanel } from "@/components/billing-panel";
 import { DataError } from "@/components/data-state";
 import { useTheme } from "@/components/theme-provider";
 import { PageContent, PageHeader, StatusBadge } from "@/components/ui/swiss";
@@ -142,6 +143,11 @@ export default function Settings() {
 
       <PageContent className="max-w-3xl flex flex-col gap-8">
         {error && <DataError error={error} title="Settings unavailable" />}
+
+        {/* Workspace-level, so it sits with the organization tab rather than
+            with personal account preferences. Renders nothing for members,
+            who are not permitted to read billing. */}
+        {tab === "organization" && !error && <BillingPanel />}
 
         {tab === "account" &&
           !error &&

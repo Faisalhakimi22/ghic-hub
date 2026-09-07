@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'wouter';
 import { AlertTriangle, FolderGit2, ScanSearch } from 'lucide-react';
 
 import {
@@ -9,7 +10,6 @@ import {
   type MeterLevel,
   type UsageMeter,
 } from '@/lib/usage';
-import { MARKETING_URL } from '@/lib/firebase';
 
 const BAR: Record<MeterLevel, string> = {
   unlimited: 'bg-muted-foreground/30',
@@ -91,14 +91,15 @@ export function RepositoryLimitNotice() {
         connected. Selecting more on GitHub will not add them here — GHIC
         keeps what you already have and does not take up the rest.
       </p>
-      <a
-        href={`${MARKETING_URL}/#pricing`}
-        target="_blank"
-        rel="noreferrer"
+      {/* Upgrading happens in the app now, so the way out of a limit is a
+          page in the product rather than a marketing page that says to send
+          an email. */}
+      <Link
+        href="/settings"
         className="self-start text-[11px] font-display tracking-widest uppercase font-bold underline underline-offset-4 hover:no-underline"
       >
-        Compare plans
-      </a>
+        Upgrade plan
+      </Link>
     </div>
   );
 }
@@ -111,11 +112,24 @@ export function RepositoryLimitNotice() {
  * the two places that actually refuse work are both server-side.
  */
 export function UsagePanel() {
-  const { data, isSuccess } = useUsage();
+  const { data, isSuccess, isError } = useUsage();
 
-  // Nothing renders until the numbers are real. A panel that flashes
-  // "0 / 500" while loading tells the customer they have used nothing,
-  // which is a claim about their bill.
+  if (isError) {
+    return (
+      <div role="alert" className="border border-destructive/40 bg-destructive/5 p-5 sm:p-6 flex flex-col gap-2">
+        <span className="flex items-center gap-2 text-sm font-bold">
+          <AlertTriangle className="w-4 h-4 shrink-0" /> Usage unavailable
+        </span>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Workspace plan and usage could not be verified. New analyses and
+          repository connections require a verified plan. Try again later.
+        </p>
+      </div>
+    );
+  }
+
+  // Nothing renders until the numbers are real. A panel that flashes zero
+  // usage while loading makes an unsupported claim about the workspace.
   if (!isSuccess || !data?.enforced) return null;
 
   const issues = meterLevel(data.issues);
@@ -161,23 +175,21 @@ export function UsagePanel() {
               Analysis is paused for {formatPeriod(data.period)}.
             </p>
             <p className="text-muted-foreground">
-              New issues are still received and nothing is lost. Analysis
-              resumes automatically when the period resets, or immediately on
-              a larger plan.
+              New analyses can run when the period resets or capacity is
+              increased. Issues skipped at the limit are not automatically
+              replayed.
             </p>
           </div>
         </div>
       )}
 
       {(stalled || issues === 'warning' || repositories === 'exhausted') && (
-        <a
-          href={`${MARKETING_URL}/#pricing`}
-          target="_blank"
-          rel="noreferrer"
+        <Link
+          href="/settings"
           className="self-start text-[11px] font-display tracking-widest uppercase font-bold underline underline-offset-4 hover:no-underline"
         >
-          Compare plans
-        </a>
+          Upgrade plan
+        </Link>
       )}
     </div>
   );

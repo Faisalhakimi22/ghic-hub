@@ -68,6 +68,18 @@ function dependencies(overrides = {}) {
     updateUserRole: async (id, role) => ({ id, role }),
     updateUserSettings: async (id, patch) => ({ id, settings: patch }),
     runtimeHealth: async () => ({ available: true, status: "ok" }),
+    usageForWorkspace: async () => ({ plan: "starter", enforced: true }),
+    subscriptionForWorkspace: async () => ({
+      plan: "starter",
+      subscribed: false,
+      customerId: null,
+      status: null,
+      currentPeriodEnd: null,
+      cancelAtPeriodEnd: false,
+    }),
+    billingHistory: async () => [],
+    createCheckoutSession: async () => ({ id: "cs_1", url: "https://checkout.test/x" }),
+    createPortalSession: async () => ({ url: "https://portal.test/x" }),
     readRepositories: async () => ({
       items: [],
       total: 0,
@@ -112,7 +124,7 @@ function dependencies(overrides = {}) {
       period: "2026-08",
       enforced: true,
       workspaceId,
-      issues: { used: 12, limit: 500, remaining: 488 },
+      issues: { used: 12, limit: 50, remaining: 38 },
       repositories: { used: 1, limit: 1, remaining: 0 },
       outcomes: { counted: 12 },
     }),
@@ -720,6 +732,23 @@ test("usage rejects writes", async () => {
   assert.equal(res.statusCode, 405);
 });
 
+test("unavailable usage returns a sanitized plan error, not a database diagnosis", async () => {
+  const handler = createHandler(dependencies({
+    usageForWorkspace: async () => {
+      throw Object.assign(new Error("internal plan lookup details"), {
+        status: 503,
+        code: "workspace_plan_unavailable",
+      });
+    },
+  }));
+  const res = response();
+  await handler(request("usage"), res);
+  assert.equal(res.statusCode, 503);
+  assert.equal(res.body.code, "workspace_plan_unavailable");
+  assert.match(res.body.error, /plan and usage could not be verified/);
+  assert.doesNotMatch(res.body.error, /internal|PostgreSQL/);
+});
+
 test("an unauthenticated request never reaches usage", async () => {
   let read = false;
   const handler = createHandler(
@@ -737,4 +766,83 @@ test("an unauthenticated request never reaches usage", async () => {
   await handler(request("usage"), res);
   assert.equal(res.statusCode, 401);
   assert.equal(read, false);
+});
+
+// ---------------------------------------------------------------------------
+// Billing routes. The role gate is the boundary: reading what a workspace
+// pays is an admin matter, and committing it to a recurring charge is not.
+// ---------------------------------------------------------------------------
+test("reading billing requires admin", async () => {
+  const handler = createHandler(dependencies());
+  const res = response();
+  await handler(request("billing", { role: "member" }), res);
+  assert.equal(res.statusCode, 403);
+});
+
+test("an admin can read billing state", async () => {
+  const handler = createHandler(dependencies());
+  const res = response();
+  await handler(request("billing", { role: "admin" }), res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.plan, "starter");
+  assert.deepEqual(res.body.history, []);
+});
+
+test("starting checkout requires owner, not merely admin", async () => {
+  let called = false;
+  const handler = createHandler(
+    dependencies({ createCheckoutSession: async () => { called = true; return { url: "x" }; } }),
+  );
+  const res = response();
+  await handler(request("billing/checkout", { method: "POST", role: "admin" }), res);
+  assert.equal(res.statusCode, 403);
+  assert.equal(called, false);
+});
+
+test("an owner gets a checkout URL", async () => {
+  const handler = createHandler(dependencies());
+  const res = response();
+  await handler(request("billing/checkout", { method: "POST", role: "owner" }), res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.url, "https://checkout.test/x");
+});
+
+test("checkout bills the viewer's workspace, never one the body names", async () => {
+  // The same rule as the usage gate: the session decides whose workspace
+  // this is, not anything the browser sent.
+  let captured = null;
+  const handler = createHandler(
+    dependencies({
+      createCheckoutSession: async (args) => {
+        captured = args;
+        return { url: "https://checkout.test/x" };
+      },
+    }),
+  );
+  const res = response();
+  await handler(
+    request("billing/checkout", {
+      method: "POST",
+      role: "owner",
+      body: { plan: "pro", workspaceId: "workspace-attacker" },
+    }),
+    res,
+  );
+  assert.equal(captured.workspaceId, "workspace-a");
+  assert.equal(captured.plan, "pro");
+});
+
+test("the billing portal requires owner", async () => {
+  const handler = createHandler(dependencies());
+  const res = response();
+  await handler(request("billing/portal", { method: "POST", role: "admin" }), res);
+  assert.equal(res.statusCode, 403);
+});
+
+test("an owner gets a portal URL", async () => {
+  const handler = createHandler(dependencies());
+  const res = response();
+  await handler(request("billing/portal", { method: "POST", role: "owner" }), res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.url, "https://portal.test/x");
 });

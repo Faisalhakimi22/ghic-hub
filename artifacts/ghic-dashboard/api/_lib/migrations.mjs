@@ -1,8 +1,12 @@
+import { ownershipContractStatements } from "./ownership-contract.mjs";
+
 const DEFAULT_WORKSPACE_ID = "ghic-default-workspace";
 const VERSION = 2;
 const OWNERSHIP_VERSION = 3;
 const LEDGER_VALIDATION_VERSION = 4;
 const PLAN_VERSION = 5;
+const PLAN_POLICY_VERSION = 6;
+const BILLING_VERSION = 7;
 
 // This migration is additive and deliberately leaves the legacy singleton
 // columns/constraints in place for the expand-and-contract rollout.
@@ -700,8 +704,97 @@ export async function runTenancyMigrations(q) {
        WHERE NOT EXISTS (
          SELECT 1 FROM ghic_schema_migrations WHERE version = ${PLAN_VERSION}
        )`,
+
+    // ---- v6: launch plan policy ---------------------------------------
+    // v5 is immutable migration history. This explicit follow-up moves only
+    // Starter to the approved launch policy and is guarded so later operator
+    // changes are not overwritten on every cold start.
+    q`UPDATE ghic_plans
+       SET max_repositories = 1,
+           max_issues_per_period = 50,
+           period = 'day',
+           updated_at = now()
+       WHERE plan = 'starter'
+         AND NOT EXISTS (
+           SELECT 1 FROM ghic_schema_migrations WHERE version = ${PLAN_POLICY_VERSION}
+         )`,
+    q`DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM ghic_schema_migrations WHERE version = 6)
+            AND NOT EXISTS (
+              SELECT 1 FROM ghic_plans
+              WHERE plan = 'starter'
+                AND max_repositories = 1
+                AND max_issues_per_period = 50
+                AND period = 'day'
+            ) THEN
+           RAISE EXCEPTION 'plan migration validation failed: starter policy';
+         END IF;
+       END $$`,
+    q`INSERT INTO ghic_schema_migrations (version)
+       SELECT ${PLAN_POLICY_VERSION}
+       WHERE NOT EXISTS (
+         SELECT 1 FROM ghic_schema_migrations WHERE version = ${PLAN_POLICY_VERSION}
+       )`,
+
+    // ---- v7: billing ---------------------------------------------------
+    // What a workspace is paying for, kept separate from what it is allowed
+    // to do. `ghic_workspaces.plan` stays the single thing every limit
+    // reader consults; this table records why that plan is what it is. A
+    // reader that had to understand Stripe to answer "how many repositories
+    // may this workspace connect" would be a second source of truth.
+    q`CREATE TABLE IF NOT EXISTS ghic_billing_subscriptions (
+      workspace_id TEXT PRIMARY KEY REFERENCES ghic_workspaces(id),
+      provider TEXT NOT NULL DEFAULT 'stripe',
+      customer_id TEXT,
+      subscription_id TEXT,
+      plan TEXT NOT NULL REFERENCES ghic_plans(plan),
+      status TEXT NOT NULL,
+      current_period_end TIMESTAMPTZ,
+      cancel_at_period_end BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`,
+    // One Stripe subscription belongs to exactly one workspace, and one
+    // customer to one workspace. Without these, a mis-routed webhook could
+    // upgrade two workspaces from a single payment and nothing would notice.
+    q`CREATE UNIQUE INDEX IF NOT EXISTS ghic_billing_subscription_id_idx
+       ON ghic_billing_subscriptions (subscription_id)
+       WHERE subscription_id IS NOT NULL`,
+    q`CREATE UNIQUE INDEX IF NOT EXISTS ghic_billing_customer_id_idx
+       ON ghic_billing_subscriptions (customer_id)
+       WHERE customer_id IS NOT NULL`,
+
+    // Every plan change, and the provider event that caused it.
+    //
+    // `event_id` is the primary key, so a redelivered webhook is a no-op at
+    // the schema level rather than a matter of application care -- the same
+    // guarantee the usage counter gets from its partial unique index. Stripe
+    // retries on any non-2xx for days; that must not buy a second month.
+    //
+    // from_plan/to_plan are plain TEXT with no foreign key on purpose: an
+    // audit row has to survive a plan being renamed or withdrawn, and a
+    // record of what a customer was charged is not config to be cascaded.
+    q`CREATE TABLE IF NOT EXISTS ghic_billing_events (
+      event_id TEXT PRIMARY KEY,
+      provider TEXT NOT NULL DEFAULT 'stripe',
+      type TEXT NOT NULL,
+      workspace_id TEXT REFERENCES ghic_workspaces(id),
+      from_plan TEXT,
+      to_plan TEXT,
+      payload_summary TEXT,
+      received_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`,
+    q`CREATE INDEX IF NOT EXISTS ghic_billing_events_workspace_idx
+       ON ghic_billing_events (workspace_id, received_at DESC)`,
+
+    q`INSERT INTO ghic_schema_migrations (version)
+       SELECT ${BILLING_VERSION}
+       WHERE NOT EXISTS (
+         SELECT 1 FROM ghic_schema_migrations WHERE version = ${BILLING_VERSION}
+       )`,
+    ...ownershipContractStatements(q),
   ];
   await q.transaction(statements);
 }
 
-export { DEFAULT_WORKSPACE_ID, PLAN_VERSION };
+export { DEFAULT_WORKSPACE_ID, PLAN_VERSION, PLAN_POLICY_VERSION, BILLING_VERSION };

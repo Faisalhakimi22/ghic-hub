@@ -9,23 +9,13 @@
  */
 import { database } from "./db.mjs";
 
-/**
- * What a deployment does when the plan tables are not there yet.
- *
- * Fail open, deliberately. A quota is a commercial limit, not a security
- * boundary: refusing every connection because a migration has not run turns a
- * billing feature into an outage, and the failure is on our side rather than
- * the customer's. The authorization checks that *are* security -- workspace
- * membership, installation ownership -- keep failing closed as they always
- * have, and none of them run through here.
- */
-const UNLIMITED = Object.freeze({
-  plan: "unknown",
-  maxRepositories: null,
-  maxIssuesPerPeriod: null,
-  period: "month",
-  enforced: false,
-});
+function planUnavailable(message, cause = null) {
+  const error = new Error(message);
+  error.status = 503;
+  error.code = "workspace_plan_unavailable";
+  if (cause) error.cause = cause;
+  return error;
+}
 
 function shape(row) {
   return {
@@ -45,20 +35,19 @@ function shape(row) {
 /** The plan a workspace is on, with its limits. */
 export async function planForWorkspace(workspaceId, deps = null) {
   const id = String(workspaceId || "").trim();
-  if (!id) return UNLIMITED;
-  const q = deps?.database ? await deps.database() : await database();
+  if (!id) throw planUnavailable("Workspace plan requires workspace context.");
   try {
+    const q = deps?.database ? await deps.database() : await database();
     const rows = await q`
       SELECT p.plan, p.max_repositories, p.max_issues_per_period, p.period
       FROM ghic_workspaces w
       JOIN ghic_plans p ON p.plan = w.plan
       WHERE w.id = ${id}`;
-    if (!rows.length) return UNLIMITED;
+    if (!rows.length) throw planUnavailable("Workspace has no valid plan.");
     return shape(rows[0]);
   } catch (error) {
-    // 42P01: the plan tables do not exist yet.
-    if (error?.code === "42P01") return UNLIMITED;
-    throw error;
+    if (error?.code === "workspace_plan_unavailable") throw error;
+    throw planUnavailable("Workspace plan could not be read.", error);
   }
 }
 
@@ -82,8 +71,9 @@ export function periodKey(period = "month", now = new Date()) {
 /**
  * What a workspace has used this period, for the dashboard.
  *
- * Read-only and best-effort. This feeds a panel; a panel that cannot render
- * is not a reason to fail the request that would have rendered it.
+ * Read-only, but authoritative. If the plan or usage tables cannot be read,
+ * the route reports a service-unavailable error rather than manufacturing an
+ * unlimited plan or zero usage.
  *
  * The counts come from `ghic_usage_events`, which the Python backend writes.
  * This service never writes a `counted` row -- that happens under the
@@ -94,18 +84,8 @@ export async function usageForWorkspace(workspaceId, deps = null, now = new Date
   const id = String(workspaceId || "").trim();
   const plan = await planForWorkspace(id, deps);
   const period = periodKey(plan.period, now);
-  const empty = {
-    plan: plan.plan,
-    period,
-    enforced: plan.enforced,
-    issues: { used: 0, limit: plan.maxIssuesPerPeriod, remaining: null },
-    repositories: { used: 0, limit: plan.maxRepositories, remaining: null },
-    outcomes: {},
-  };
-  if (!id) return empty;
-
-  const q = deps?.database ? await deps.database() : await database();
   try {
+    const q = deps?.database ? await deps.database() : await database();
     const [usageRows, repoRows] = await Promise.all([
       q`SELECT outcome, count(*)::int AS n FROM ghic_usage_events
          WHERE workspace_id = ${id} AND period = ${period}
@@ -142,8 +122,7 @@ export async function usageForWorkspace(workspaceId, deps = null, now = new Date
       outcomes,
     };
   } catch (error) {
-    if (error?.code === "42P01") return empty;
-    throw error;
+    throw planUnavailable("Workspace usage could not be read.", error);
   }
 }
 

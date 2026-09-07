@@ -1,4 +1,4 @@
-import { CheckCircle2, Github, Loader2, ShieldCheck, TriangleAlert } from 'lucide-react';
+import { Github, Loader2, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { MARKETING_URL } from '@/lib/firebase';
 
@@ -41,23 +41,23 @@ export default function Login() {
             GHIC Dashboard
           </span>
           <h1 className="text-2xl font-display font-bold tracking-tight uppercase">
-            {setup.active ? 'GitHub app installed' : 'Sign in'}
+            {setup.active ? 'Verify GitHub connection' : 'Sign in'}
           </h1>
           <p className="text-sm text-muted-foreground leading-relaxed">
             {setup.active
-              ? 'GHIC is connected to GitHub. Sign in with the same GitHub account to open the hub.'
+              ? 'Sign in with the account that started this connection so GHIC can verify the GitHub setup result.'
               : 'This dashboard shows live repository and triage data. Sign in with the GitHub account you use for GHIC.'}
           </p>
         </div>
 
         {setup.active && (
-          <div className="border border-emerald-500/40 bg-emerald-500/5 p-4 flex flex-col gap-2">
-            <span className="flex items-center gap-2 text-[10px] font-display tracking-widest uppercase font-bold text-emerald-700 dark:text-emerald-300">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Installation complete
+          <div className="border border-border bg-muted/40 p-4 flex flex-col gap-2">
+            <span className="flex items-center gap-2 text-[10px] font-display tracking-widest uppercase font-bold">
+              <ShieldCheck className="w-3.5 h-3.5" /> Verification pending
             </span>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Repository access is installed. One GitHub sign-in creates the browser session
-              for this dashboard.
+              Repository access is confirmed only after GHIC verifies your
+              session and the installation with GitHub.
             </p>
           </div>
         )}

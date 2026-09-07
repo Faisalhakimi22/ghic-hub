@@ -20,7 +20,7 @@ export interface UsageMeter {
 export interface WorkspaceUsage {
   plan: string;
   period: string;
-  /** False when the plan tables could not be read; the UI then shows nothing. */
+  /** Verified by the server; an unreadable plan returns an error, not a plan. */
   enforced: boolean;
   issues: UsageMeter;
   repositories: UsageMeter;
@@ -61,8 +61,18 @@ export function meterPercent(meter: UsageMeter | undefined): number {
   return Math.min(100, Math.round((meter.used / meter.limit) * 100));
 }
 
-/** "August 2026", from the `YYYY-MM` period key the server sends. */
+/** Human-readable UTC month or day from the server's period key. */
 export function formatPeriod(period: string): string {
+  const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(period || '');
+  if (day) {
+    const date = new Date(Date.UTC(Number(day[1]), Number(day[2]) - 1, Number(day[3])));
+    return date.toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+  }
   const match = /^(\d{4})-(\d{2})$/.exec(period || '');
   if (!match) return period || '';
   const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, 1));

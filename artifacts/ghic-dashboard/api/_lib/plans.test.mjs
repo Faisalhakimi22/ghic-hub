@@ -77,35 +77,45 @@ test("duplicate names in one selection consume one slot", () => {
   assert.deepEqual(result.refused, []);
 });
 
-test("the plan reader falls open when the tables are absent", async () => {
-  // A quota is a commercial limit, not a security boundary. Refusing every
-  // connection because a migration has not run turns billing into an outage,
-  // and the fault would be ours rather than the customer's.
+test("the plan reader fails closed when the tables are absent", async () => {
   const missing = () => {
     const error = new Error('relation "ghic_plans" does not exist');
     error.code = "42P01";
     throw error;
   };
-  const plan = await planForWorkspace("ws-1", { database: async () => missing });
-  assert.equal(plan.maxRepositories, null);
-  assert.equal(plan.enforced, false);
+  await assert.rejects(
+    planForWorkspace("ws-1", { database: async () => missing }),
+    (error) => error.status === 503 && error.code === "workspace_plan_unavailable",
+  );
 });
 
-test("the plan reader fails open for an unknown workspace", async () => {
+test("the plan reader fails closed for an unknown workspace", async () => {
   const q = () => Promise.resolve([]);
-  const plan = await planForWorkspace("ws-missing", { database: async () => q });
-  assert.equal(plan.maxRepositories, null);
-  assert.equal(plan.enforced, false);
+  await assert.rejects(
+    planForWorkspace("ws-missing", { database: async () => q }),
+    (error) => error.status === 503 && error.code === "workspace_plan_unavailable",
+  );
+});
+
+test("database initialization failure returns a plan-unavailable error", async () => {
+  const deps = { database: async () => { throw new Error("database connection unavailable"); } };
+  for (const read of [planForWorkspace, usageForWorkspace]) {
+    await assert.rejects(
+      read("ws-1", deps),
+      (error) => error.status === 503 && error.code === "workspace_plan_unavailable",
+    );
+  }
 });
 
 test("a real plan row is read as written", async () => {
   const q = () => Promise.resolve([{
-    plan: "starter", max_repositories: 1, max_issues_per_period: 500, period: "month",
+    plan: "starter", max_repositories: 1, max_issues_per_period: 50, period: "day",
   }]);
   const plan = await planForWorkspace("ws-1", { database: async () => q });
   assert.equal(plan.plan, "starter");
   assert.equal(plan.maxRepositories, 1);
-  assert.equal(plan.maxIssuesPerPeriod, 500);
+  assert.equal(plan.maxIssuesPerPeriod, 50);
+  assert.equal(plan.period, "day");
   assert.equal(plan.enforced, true);
 });
 
@@ -121,8 +131,10 @@ test("an enterprise row keeps its nulls", async () => {
 
 test("a blank workspace id is not a licence for unlimited enforcement", async () => {
   for (const id of ["", "   ", null, undefined]) {
-    const plan = await planForWorkspace(id);
-    assert.equal(plan.enforced, false);
+    await assert.rejects(
+      planForWorkspace(id),
+      (error) => error.status === 503 && error.code === "workspace_plan_unavailable",
+    );
   }
 });
 
@@ -143,7 +155,7 @@ function stubDatabase(answers) {
 }
 
 const starter = ["FROM ghic_workspaces w", [{
-  plan: "starter", max_repositories: 1, max_issues_per_period: 500, period: "month",
+  plan: "starter", max_repositories: 1, max_issues_per_period: 50, period: "day",
 }]];
 
 test("the period is the UTC calendar month", () => {
@@ -162,6 +174,11 @@ test("the period matches the Python backend's format exactly", () => {
   assert.equal(periodKey("month", new Date("2026-01-05T00:00:00Z")), "2026-01");
 });
 
+test("a daily plan uses the UTC calendar day", () => {
+  assert.equal(periodKey("day", new Date("2026-08-31T23:30:00Z")), "2026-08-31");
+  assert.equal(periodKey("day", new Date("2026-09-01T00:30:00Z")), "2026-09-01");
+});
+
 test("usage separates the four outcomes and counts only the billed one", async () => {
   const deps = {
     database: stubDatabase([
@@ -178,7 +195,7 @@ test("usage separates the four outcomes and counts only the billed one", async (
   // A failed analysis is not something to bill for, so it does not move the
   // number the customer is shown as their usage.
   assert.equal(usage.issues.used, 12);
-  assert.equal(usage.issues.remaining, 488);
+  assert.equal(usage.issues.remaining, 38);
   assert.equal(usage.outcomes.failed, 3);
 });
 
@@ -212,7 +229,7 @@ test("unlimited reports no remainder rather than zero", async () => {
   assert.equal(usage.repositories.remaining, null);
 });
 
-test("usage falls open when the tables are absent", async () => {
+test("usage fails closed when the tables are absent", async () => {
   const deps = {
     database: async () => () => {
       const error = new Error('relation "ghic_usage_events" does not exist');
@@ -220,9 +237,10 @@ test("usage falls open when the tables are absent", async () => {
       throw error;
     },
   };
-  const usage = await usageForWorkspace("ws-1", deps);
-  assert.equal(usage.enforced, false);
-  assert.equal(usage.issues.used, 0);
+  await assert.rejects(
+    usageForWorkspace("ws-1", deps),
+    (error) => error.status === 503 && error.code === "workspace_plan_unavailable",
+  );
 });
 
 test("usage counts only active repositories", async () => {

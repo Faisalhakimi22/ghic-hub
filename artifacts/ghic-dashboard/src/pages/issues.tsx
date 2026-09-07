@@ -63,6 +63,20 @@ export default function Issues() {
 
         {query.isError ? (
           <DataError error={query.error} title="Issues unavailable" />
+        ) : query.isLoading ? (
+          <div
+            role="status"
+            className="border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground animate-pulse"
+          >
+            Loading issues...
+          </div>
+        ) : !query.data?.items.length ? (
+          <div
+            role="status"
+            className="border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground"
+          >
+            No persisted issues match the current filters.
+          </div>
         ) : (
           <div className="border border-border bg-card overflow-x-auto">
             <table className="w-full min-w-[820px] text-sm text-left">
@@ -87,17 +101,7 @@ export default function Issues() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {query.isLoading ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-4 py-8 text-center text-muted-foreground animate-pulse"
-                    >
-                      Loading issues...
-                    </td>
-                  </tr>
-                ) : query.data?.items.length ? (
-                  query.data.items.map((issue) => (
+                {query.data.items.map((issue) => (
                     <tr
                       key={issue.id}
                       className="hover:bg-muted/30 transition-colors group"
@@ -144,17 +148,7 @@ export default function Issues() {
                         {formatDate(issue.analysisTimestamp || issue.updatedAt)}
                       </td>
                     </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-4 py-8 text-center text-muted-foreground"
-                    >
-                      No persisted issues match the current filters.
-                    </td>
-                  </tr>
-                )}
+                  ))}
               </tbody>
             </table>
           </div>

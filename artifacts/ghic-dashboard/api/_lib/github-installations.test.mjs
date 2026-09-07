@@ -16,11 +16,16 @@ import {
  * Records every statement so tests can assert that nothing was written on
  * a rejected request, and answers the one SELECT these functions make.
  */
-function fakeDatabase({ existingInstallation = null } = {}) {
+function fakeDatabase({ existingInstallation = null, missingPlan = false } = {}) {
   const statements = [];
   const q = (strings, ...values) => {
     const text = strings.join("?").replace(/\s+/g, " ").trim();
     statements.push({ text, values });
+    if (text.startsWith("SELECT p.plan, p.max_repositories")) {
+      return Promise.resolve(missingPlan ? [] : [{
+        plan: "starter", max_repositories: 1, max_issues_per_period: 50, period: "day",
+      }]);
+    }
     if (text.startsWith("SELECT connected_by_firebase_uid")) {
       return Promise.resolve(existingInstallation ? [existingInstallation] : []);
     }
@@ -97,6 +102,16 @@ const VIEWER = {
   workspaceRole: "owner",
 };
 const STATE = "test-state";
+
+test("a missing workspace plan blocks connection without consuming intent or saving repositories", async () => {
+  const d = deps({ db: fakeDatabase({ missingPlan: true }) });
+  await assert.rejects(
+    completeGitHubInstallation(VIEWER, { installationId: 100, state: STATE }, d.value),
+    (error) => error.status === 503 && error.code === "workspace_plan_unavailable",
+  );
+  assert.equal(d.transactionCalls.length, 0);
+  assert.equal(wrote(d.statements), false);
+});
 
 function wrote(statements) {
   return statements.some((s) => /^(INSERT|UPDATE)/i.test(s.text));
@@ -427,6 +442,11 @@ function ownershipDeps({
         workspace_id: installationWorkspace,
         connection_status: installationStatus,
         revoked_at: installationRevokedAt,
+      }]);
+    }
+    if (text.startsWith("SELECT p.plan, p.max_repositories")) {
+      return Promise.resolve([{
+        plan: "starter", max_repositories: 1, max_issues_per_period: 50, period: "day",
       }]);
     }
     if (text.startsWith("SELECT repo_full_name, installation_id, workspace_id")) {
