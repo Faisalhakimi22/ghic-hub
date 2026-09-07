@@ -235,6 +235,32 @@
 }
 
 @layer utilities {
+  /* The OS default scrollbar is rounded and grey and reads as borrowed from
+     another design. This one is square and drawn in theme tokens, so it
+     stays consistent in both light and dark rather than being the one
+     element that ignores the palette. */
+  .scroll-slim {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .scroll-slim::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scroll-slim::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scroll-slim::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 0;
+  }
+  .scroll-slim:hover::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground));
+  }
+  .scroll-slim::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
   input[type='search']::-webkit-search-cancel-button {
     @apply hidden;
   }

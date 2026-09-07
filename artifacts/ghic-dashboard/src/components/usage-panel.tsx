@@ -183,14 +183,6 @@ export function UsagePanel() {
         </div>
       )}
 
-      {(stalled || issues === 'warning' || repositories === 'exhausted') && (
-        <Link
-          href="/settings"
-          className="self-start text-[11px] font-display tracking-widest uppercase font-bold underline underline-offset-4 hover:no-underline"
-        >
-          Upgrade plan
-        </Link>
-      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Save, ShieldAlert } from "lucide-react";
 
 import { BillingPanel } from "@/components/billing-panel";
+import { UsagePanel } from "@/components/usage-panel";
 import { DataError } from "@/components/data-state";
 import { useTheme } from "@/components/theme-provider";
 import { PageContent, PageHeader, StatusBadge } from "@/components/ui/swiss";
@@ -147,6 +148,10 @@ export default function Settings() {
         {/* Workspace-level, so it sits with the organization tab rather than
             with personal account preferences. Renders nothing for members,
             who are not permitted to read billing. */}
+        {/* Usage above billing: what has been consumed is the reason
+            somebody opens this page, and the plan it is measured against is
+            the thing they may want to change. */}
+        {tab === "organization" && !error && <UsagePanel />}
         {tab === "organization" && !error && <BillingPanel />}
 
         {tab === "account" &&

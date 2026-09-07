@@ -79,7 +79,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     <div className="h-svh w-full flex overflow-hidden bg-background text-foreground selection:bg-primary/30">
       {/* Sidebar Rail */}
       <aside className="hidden w-56 shrink-0 border-r border-border md:flex flex-col justify-between bg-card relative z-10">
-        <div className="flex-1 overflow-y-auto py-4 flex flex-col gap-6">
+        <div className="flex-1 overflow-y-auto scroll-slim py-4 flex flex-col gap-6">
           <div className="px-4 mb-2 flex items-center justify-between">
             <div className="flex items-center gap-2 min-w-0">
               <img
@@ -93,8 +93,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </div>
             <ThemeToggle />
           </div>
-
-          <AccountStrip account={account.data} />
 
           <NavigationGroups location={location} />
         </div>
@@ -127,7 +125,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 className="w-[88vw] max-w-[320px] p-0 gap-0 bg-card flex flex-col"
               >
                 <SheetTitle className="sr-only">GHIC navigation</SheetTitle>
-                <div className="flex-1 min-h-0 overflow-y-auto py-4 flex flex-col gap-6">
+                <div className="flex-1 min-h-0 overflow-y-auto scroll-slim py-4 flex flex-col gap-6">
                   <div className="px-4 pr-12 flex items-center gap-2">
                     <img
                       src="/logo.png"
@@ -138,7 +136,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
                       GHIC
                     </span>
                   </div>
-                  <AccountStrip account={account.data} />
                   <NavigationGroups
                     location={location}
                     onNavigate={() => setMobileNavigationOpen(false)}
@@ -161,7 +158,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </div>
           <ThemeToggle />
         </header>
-        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scroll-slim">
           {children}
         </div>
       </main>
@@ -214,51 +211,12 @@ function NavigationGroups({
 }
 
 /**
- * Who is signed in, and the way out.
+ * Who is signed in, the workspace, and the way out.
  *
- * A dashboard with no visible sign-out is a problem on any shared or
- * borrowed machine: the session persists across reloads by design, so
- * without this the only exit is clearing site data.
+ * A dashboard with no visible sign-out is a problem on a shared or borrowed
+ * machine: the session survives reloads by design, so without this the only
+ * exit is clearing site data.
  */
-function AccountStrip({ account }: { account?: DashboardAccount }) {
-  const { user, signOut } = useAuth();
-  if (!user) return null;
-  const avatar =
-    account?.settings.avatarUrl || account?.avatarUrl || user.photoURL;
-  const label =
-    account?.settings.displayName ||
-    account?.name ||
-    user.displayName ||
-    user.email;
-  return (
-    <div className="px-4 flex items-center gap-2 min-w-0">
-      {avatar ? (
-        <img
-          src={avatar}
-          alt=""
-          className="w-6 h-6 border border-border object-cover shrink-0"
-        />
-      ) : (
-        <div className="w-6 h-6 border border-border bg-muted shrink-0" />
-      )}
-      <span
-        className="text-xs truncate flex-1 min-w-0"
-        title={user.email || undefined}
-      >
-        {label}
-      </span>
-      <button
-        onClick={() => void signOut()}
-        title="Sign out"
-        aria-label="Sign out"
-        className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
-      >
-        <LogOut className="w-4 h-4" />
-      </button>
-    </div>
-  );
-}
-
 function AccountFooter({
   account,
   workspace,
@@ -266,7 +224,7 @@ function AccountFooter({
   account?: DashboardAccount;
   workspace?: string;
 }) {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   if (!user) return null;
   const label =
     account?.settings.displayName ||
@@ -296,7 +254,7 @@ function AccountFooter({
           {initials}
         </div>
       )}
-      <div className="flex flex-col min-w-0">
+      <div className="flex flex-col min-w-0 flex-1">
         <span className="text-xs font-bold leading-tight truncate">
           {label}
         </span>
@@ -305,6 +263,14 @@ function AccountFooter({
           {account?.role ? ` | ${account.role}` : ""}
         </span>
       </div>
+      <button
+        onClick={() => void signOut()}
+        title="Sign out"
+        aria-label="Sign out"
+        className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+      >
+        <LogOut className="w-4 h-4" />
+      </button>
     </div>
   );
 }

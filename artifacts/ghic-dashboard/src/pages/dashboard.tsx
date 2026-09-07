@@ -18,7 +18,6 @@ import { Link } from "wouter";
 
 import { ConnectGitHub, useNothingConnected } from "@/components/connect-github";
 import { DataError } from "@/components/data-state";
-import { UsagePanel } from "@/components/usage-panel";
 import {
   Grid,
   PageContent,
@@ -50,7 +49,7 @@ function BentoCard({
   };
   return (
     <div
-      className={`p-4 sm:p-5 flex flex-col justify-between min-h-[132px] sm:min-h-[148px] min-w-0 ${variants[variant]}`}
+      className={`p-3 sm:p-4 flex flex-col justify-between gap-3 min-h-[92px] sm:min-h-[100px] min-w-0 ${variants[variant]}`}
     >
       <div className="flex items-start justify-between gap-2">
         <span
@@ -60,7 +59,7 @@ function BentoCard({
         </span>
         {Icon && <Icon className={`w-3.5 h-3.5 shrink-0 ${muted[variant]}`} />}
       </div>
-      <div className="font-display font-bold leading-none tracking-tight text-3xl sm:text-4xl break-words [overflow-wrap:anywhere]">
+      <div className="font-display font-bold leading-none tracking-tight text-2xl sm:text-[1.75rem] break-words [overflow-wrap:anywhere]">
         {value === null || value === undefined ? (
           <span className="opacity-40" title="Not recorded">
             &mdash;
@@ -96,11 +95,6 @@ export default function Dashboard() {
         </PageContent>
       ) : (
       <PageContent className="flex flex-col gap-8 w-full">
-        {/* Above the metrics on purpose. A workspace whose analysis has
-            stopped needs to learn that before it reads a chart of how
-            little happened this month and concludes the product is
-            broken. */}
-        <UsagePanel />
         {overview.isLoading ? (
           <div className="h-32 bg-muted animate-pulse border border-border" />
         ) : overview.isError ? (
