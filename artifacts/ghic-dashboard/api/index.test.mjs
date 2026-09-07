@@ -68,6 +68,7 @@ function dependencies(overrides = {}) {
     updateUserRole: async (id, role) => ({ id, role }),
     updateUserSettings: async (id, patch) => ({ id, settings: patch }),
     runtimeHealth: async () => ({ available: true, status: "ok" }),
+    databaseHealth: async () => "healthy",
     usageForWorkspace: async () => ({ plan: "starter", enforced: true }),
     subscriptionForWorkspace: async () => ({
       plan: "starter",
@@ -845,4 +846,62 @@ test("an owner gets a portal URL", async () => {
   await handler(request("billing/portal", { method: "POST", role: "owner" }), res);
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.url, "https://portal.test/x");
+});
+
+// ---------------------------------------------------------------------------
+// Service status. These were hardcoded strings: the panel reported "unknown"
+// for LLM and GitHub forever, and "healthy" for a database it never asked.
+// ---------------------------------------------------------------------------
+test("system health reports the LLM state the backend gave", async () => {
+  const handler = createHandler(
+    dependencies({
+      runtimeHealth: async () => ({
+        available: true,
+        status: "ok",
+        llm: { status: "enabled", providers: ["groq", "openrouter"] },
+        github: { status: "enabled", writes: true },
+      }),
+    }),
+  );
+  const res = response();
+  await handler(request("system-health", { role: "admin" }), res);
+  assert.equal(res.body.llmProviderStatus, "enabled");
+  assert.deepEqual(res.body.llmProviders, ["groq", "openrouter"]);
+  assert.equal(res.body.githubApiStatus, "enabled");
+  assert.equal(res.body.githubWritesEnabled, true);
+});
+
+test("an older backend that reports neither still reads as unknown", async () => {
+  // "unknown" is now what an unreachable or outdated backend looks like,
+  // rather than the permanent answer it used to be.
+  const handler = createHandler(dependencies());
+  const res = response();
+  await handler(request("system-health", { role: "admin" }), res);
+  assert.equal(res.body.llmProviderStatus, "unknown");
+  assert.equal(res.body.githubApiStatus, "unknown");
+});
+
+test("a configured GitHub client that writes nothing is reported as such", async () => {
+  const handler = createHandler(
+    dependencies({
+      runtimeHealth: async () => ({
+        available: true,
+        status: "ok",
+        github: { status: "enabled", writes: false },
+      }),
+    }),
+  );
+  const res = response();
+  await handler(request("system-health", { role: "admin" }), res);
+  assert.equal(res.body.githubApiStatus, "enabled");
+  assert.equal(res.body.githubWritesEnabled, false);
+});
+
+test("the database status is the probe's answer, not a constant", async () => {
+  const handler = createHandler(
+    dependencies({ databaseHealth: async () => "degraded" }),
+  );
+  const res = response();
+  await handler(request("system-health", { role: "admin" }), res);
+  assert.equal(res.body.databaseStatus, "degraded");
 });

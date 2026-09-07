@@ -357,6 +357,27 @@ export async function database() {
   return sql();
 }
 
+/**
+ * Whether Postgres actually answers.
+ *
+ * The health panel used to report the database as healthy without asking it
+ * anything. That was very nearly true -- the same request had already read
+ * two tables to build its response -- but "very nearly true" is how a status
+ * page ends up green during an outage. This asks.
+ *
+ * Never throws: a health check that fails by failing is not a health check.
+ */
+export async function databaseHealth() {
+  if (!dbConfigured) return "not_configured";
+  try {
+    const q = await database();
+    await q`SELECT 1`;
+    return "healthy";
+  } catch {
+    return "degraded";
+  }
+}
+
 /** Execute related writes in one Neon/Postgres transaction. */
 export async function transaction(queries) {
   await ready();

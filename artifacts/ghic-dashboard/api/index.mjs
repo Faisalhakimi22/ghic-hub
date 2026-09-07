@@ -13,6 +13,7 @@ import {
 } from "./_lib/auth.mjs";
 import {
   authenticateUser,
+  databaseHealth,
   dbConfigured,
   getOrgSettings,
   getUser,
@@ -288,6 +289,7 @@ const productionDependencies = {
   disconnectGitHubInstallation,
   refreshGitHubInstallation,
   usageForWorkspace,
+  databaseHealth,
   subscriptionForWorkspace,
   billingHistory,
   createCheckoutSession,
@@ -660,10 +662,11 @@ export function createHandler(overrides = {}) {
           available: true,
         };
       } else if (path === "system-health" || path === "healthz") {
-        const [runtime, repositories, aggregate] = await Promise.all([
+        const [runtime, repositories, aggregate, database] = await Promise.all([
           dependencies.runtimeHealth(),
           dependencies.readRepositories({ limit: 100, workspaceId: viewer.workspaceId }),
           dependencies.readAggregate(viewer.workspaceId),
+          dependencies.databaseHealth(),
         ]);
         const ri = runtime.repository_intelligence || {};
         const signaturesMatch = repositories.items.every(
@@ -685,7 +688,7 @@ export function createHandler(overrides = {}) {
               ? "not_configured"
               : "disabled",
           queueLength: null,
-          databaseStatus: "healthy",
+          databaseStatus: database,
           vectorStoreStatus:
             ri.vector_provider === "postgres" && signaturesMatch
               ? "healthy"
@@ -698,7 +701,11 @@ export function createHandler(overrides = {}) {
               : ri.enabled
                 ? "degraded"
                 : "disabled",
-          llmProviderStatus: "unknown",
+          // Reported by the backend rather than guessed at. "unknown" is
+          // now only what an unreachable backend looks like, not the
+          // permanent answer it used to be.
+          llmProviderStatus: runtime.llm?.status || "unknown",
+          llmProviders: runtime.llm?.providers || [],
           repositoryIntelligenceStatus:
             ri.enabled && signaturesMatch
               ? "healthy"
@@ -708,7 +715,10 @@ export function createHandler(overrides = {}) {
           engineeringIntelligenceStatus: "disabled",
           automationStatus: "disabled",
           autoIndex: ri.auto_index ?? null,
-          githubApiStatus: "unknown",
+          githubApiStatus: runtime.github?.status || "unknown",
+          // A configured client that writes nothing is the state most
+          // easily mistaken for a working one.
+          githubWritesEnabled: runtime.github?.writes ?? null,
           githubApiRateLimit: null,
           githubApiRateLimitRemaining: null,
           processingLatencyMs:
