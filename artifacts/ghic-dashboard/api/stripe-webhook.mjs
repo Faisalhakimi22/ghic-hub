@@ -97,7 +97,16 @@ export function createWebhookHandler(overrides = {}) {
       console.error(
         `stripe-webhook rejected: ${error?.name || "Error"} ${error?.code || "no-code"} ${error?.message || ""}`,
       );
-      res.status(status).json({ error: error?.code || "invalid_event" });
+      res.status(status).json({
+        error: error?.code || "invalid_event",
+        diagnostic: {
+          name: error?.name || null,
+          message: error?.message || null,
+          bodyType: typeof req.body,
+          hasIterator: typeof req[Symbol.asyncIterator] === "function",
+          hasRawBody: typeof req.rawBody,
+        },
+      });
       return;
     }
 
