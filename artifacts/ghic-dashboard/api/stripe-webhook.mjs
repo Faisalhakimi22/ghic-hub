@@ -6,9 +6,11 @@
  * present. Everything the Hub serves is behind a viewer; this is the one
  * thing that is not, so it is the one thing that verifies a signature.
  *
- * `vercel.json` carries a passthrough rewrite for this path -- the catch-all
- * `/api/:path*` rule would otherwise hand the request to `index.mjs` and it
- * would be rejected as unauthenticated.
+ * `vercel.json` excludes this path from the catch-all `/api/:path*` rewrite.
+ * That rule would otherwise hand Stripe's anonymous POST to `index.mjs`,
+ * which answers 401 before it routes. A self-referential passthrough rewrite
+ * does not work: it is a no-op, so evaluation falls through to the catch-all
+ * anyway. The exclusion has to be on the catch-all itself.
  *
  * What makes this endpoint safe is not that it is hard to find. It is that
  * an unsigned body is refused, a stale one is refused, and a replayed one
