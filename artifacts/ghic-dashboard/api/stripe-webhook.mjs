@@ -92,6 +92,11 @@ export function createWebhookHandler(overrides = {}) {
       // signing secret is our fault and answers 503, the same way the
       // retention endpoint reports a missing CRON_SECRET.
       const status = Number(error?.status) >= 400 ? Number(error.status) : 500;
+      // Names the failure in the log without echoing the body or the
+      // signature, so a rejected delivery can be diagnosed from Vercel.
+      console.error(
+        `stripe-webhook rejected: ${error?.name || "Error"} ${error?.code || "no-code"} ${error?.message || ""}`,
+      );
       res.status(status).json({ error: error?.code || "invalid_event" });
       return;
     }
