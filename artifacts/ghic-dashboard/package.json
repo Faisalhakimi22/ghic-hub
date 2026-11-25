@@ -78,8 +78,9 @@
     "zod": "catalog:"
   },
   "dependencies": {
-    "jose": "^5.9.6",
     "@neondatabase/serverless": "^0.10.4",
-    "firebase": "^11.10.0"
+    "@sentry/browser": "10.78.0",
+    "firebase": "^11.10.0",
+    "jose": "^5.9.6"
   }
 }

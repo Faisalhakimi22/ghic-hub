@@ -31,6 +31,7 @@ import {
 } from "./_lib/github-installations.mjs";
 import { usageForWorkspace } from "./_lib/plans.mjs";
 import { parseIssueIdentifier, readIssueFeedback, saveIssueFeedback } from "./_lib/issue-feedback.mjs";
+import { reportError } from "./_lib/monitoring.mjs";
 import { billingHistory, subscriptionForWorkspace } from "./_lib/billing.mjs";
 import { createCheckoutSession, createPortalSession } from "./_lib/stripe.mjs";
 import {
@@ -297,6 +298,7 @@ const productionDependencies = {
   createPortalSession,
   readIssueFeedback,
   saveIssueFeedback,
+  reportError,
 };
 
 export function createHandler(overrides = {}) {
@@ -365,6 +367,9 @@ export function createHandler(overrides = {}) {
       viewer = await dependencies.authenticateUser(claims);
     } catch (error) {
       const response = errorPayload(error);
+      if (response.status >= 500) {
+        await dependencies.reportError(error, { route: path, status: response.status });
+      }
       res.status(response.status).json(response.body);
       return;
     }
@@ -795,6 +800,10 @@ export function createHandler(overrides = {}) {
       res.status(200).json(body);
     } catch (error) {
       const response = errorPayload(error);
+      // 4xx are the caller's mistake and expected; only report what is ours.
+      if (response.status >= 500) {
+        await dependencies.reportError(error, { route: path, status: response.status });
+      }
       res.status(response.status).json(response.body);
     }
   };

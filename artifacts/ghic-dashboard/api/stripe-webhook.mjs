@@ -18,6 +18,7 @@
  */
 import { applyPlanChange, DEFAULT_PLAN } from "./_lib/billing.mjs";
 import { eventToPlanChange, verifyWebhookSignature } from "./_lib/stripe.mjs";
+import { reportError } from "./_lib/monitoring.mjs";
 
 /**
  * The exact bytes Stripe signed.
@@ -65,6 +66,7 @@ export function createWebhookHandler(overrides = {}) {
     verifyWebhookSignature,
     eventToPlanChange,
     applyPlanChange,
+    reportError,
     env: process.env,
     ...overrides,
   };
@@ -97,6 +99,11 @@ export function createWebhookHandler(overrides = {}) {
       console.error(
         `stripe-webhook rejected: ${error?.name || "Error"} ${error?.code || "no-code"} ${error?.message || ""}`,
       );
+      // A bad signature is noise from the internet; a 5xx (missing signing
+      // secret) means every real payment event is being refused.
+      if (status >= 500) {
+        await deps.reportError(error, { route: "stripe-webhook", status }, { env: deps.env });
+      }
       res.status(status).json({ error: error?.code || "invalid_event" });
       return;
     }
@@ -133,6 +140,7 @@ export function createWebhookHandler(overrides = {}) {
       // the database blinked, and telling Stripe it went fine, is the one
       // outcome with no way back -- the customer has been charged and the
       // event will never be sent again.
+      await deps.reportError(error, { route: "stripe-webhook", status: 500 }, { env: deps.env });
       res.status(500).json({ error: error?.code || "plan_change_failed" });
     }
   };

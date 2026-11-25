@@ -75,6 +75,8 @@ export default defineConfig(async ({ command }) => {
             if (!id.includes('node_modules')) return undefined;
             if (id.includes('/firebase/') || id.includes('/@firebase/')) return 'firebase';
             if (id.includes('/recharts/') || id.includes('/d3-')) return 'charts';
+            // Loaded lazily by src/lib/monitoring.ts, only when a DSN is set.
+            if (id.includes('/@sentry/') || id.includes('/@sentry-internal/')) return 'sentry';
             return 'vendor';
           },
         },
