@@ -299,6 +299,9 @@ const productionDependencies = {
   readIssueFeedback,
   saveIssueFeedback,
   reportError,
+  // Free beta: nothing is for sale until this is explicitly switched on.
+  // Read per request so flipping the variable needs no code change.
+  billingEnabled: () => String(process.env.GHIC_BILLING_ENABLED || "").trim() === "true",
 };
 
 export function createHandler(overrides = {}) {
@@ -507,6 +510,14 @@ export function createHandler(overrides = {}) {
       // decided on, not the one the payload claimed.
       if (path === "billing/checkout" && req.method === "POST") {
         requireRole(viewer, "owner");
+        // Enforced here, not only by hiding the button: a direct POST must
+        // not be able to start a charge while paid plans are not on sale.
+        if (!dependencies.billingEnabled()) {
+          throw Object.assign(new Error("Paid plans are not on sale during the beta."), {
+            status: 409,
+            code: "billing_unavailable",
+          });
+        }
         const payload = await readJson(req);
         const plan = String(payload?.plan || "pro").trim();
         const origin = dashboardOrigin(req, url);
@@ -572,7 +583,7 @@ export function createHandler(overrides = {}) {
           dependencies.subscriptionForWorkspace(viewer.workspaceId),
           dependencies.billingHistory(viewer.workspaceId, 20),
         ]);
-        body = { ...subscription, history };
+        body = { ...subscription, history, checkoutAvailable: dependencies.billingEnabled() };
       } else if (path === "repositories") {
         body = await dependencies.readRepositories({
           workspaceId: viewer.workspaceId,

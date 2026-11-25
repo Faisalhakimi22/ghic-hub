@@ -94,7 +94,7 @@ export function BillingPanel() {
             {portal.isPending ? 'Opening…' : 'Manage billing'}
             <ExternalLink className="w-3 h-3" />
           </button>
-        ) : (
+        ) : !data.checkoutAvailable ? null : (
           <button
             type="button"
             disabled={busy}
@@ -108,7 +108,9 @@ export function BillingPanel() {
         <span className="text-[11px] text-muted-foreground">
           {data.subscribed
             ? 'Change card, download invoices or cancel — handled by Stripe.'
-            : 'Secure checkout hosted by Stripe. Cancel any time.'}
+            : data.checkoutAvailable
+              ? 'Secure checkout hosted by Stripe. Cancel any time.'
+              : 'GHIC is free during the beta. Paid plans are not on sale yet.'}
         </span>
       </div>
 

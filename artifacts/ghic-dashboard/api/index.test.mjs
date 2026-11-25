@@ -80,6 +80,7 @@ function dependencies(overrides = {}) {
     }),
     billingHistory: async () => [],
     createCheckoutSession: async () => ({ id: "cs_1", url: "https://checkout.test/x" }),
+    billingEnabled: () => true,
     createPortalSession: async () => ({ url: "https://portal.test/x" }),
     readRepositories: async () => ({
       items: [],
@@ -833,6 +834,31 @@ test("checkout bills the viewer's workspace, never one the body names", async ()
   );
   assert.equal(captured.workspaceId, "workspace-a");
   assert.equal(captured.plan, "pro");
+});
+
+test("while billing is off, checkout is refused server-side and nothing is created", async () => {
+  let called = false;
+  const handler = createHandler(
+    dependencies({
+      billingEnabled: () => false,
+      createCheckoutSession: async () => { called = true; return { url: "x" }; },
+    }),
+  );
+  const res = response();
+  await handler(request("billing/checkout", { method: "POST", role: "owner" }), res);
+  assert.equal(res.statusCode, 409);
+  assert.equal(res.body.code, "billing_unavailable");
+  assert.equal(called, false);
+});
+
+test("billing state tells the UI whether checkout is available", async () => {
+  for (const enabled of [true, false]) {
+    const handler = createHandler(dependencies({ billingEnabled: () => enabled }));
+    const res = response();
+    await handler(request("billing", { role: "admin" }), res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.checkoutAvailable, enabled);
+  }
 });
 
 test("the billing portal requires owner", async () => {

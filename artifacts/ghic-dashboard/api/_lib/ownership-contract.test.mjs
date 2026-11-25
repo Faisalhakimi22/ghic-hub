@@ -111,7 +111,8 @@ test("real SQL validates ownership, preserves vectors/SHA/history, and records v
   assert.equal(constraints.length, 3);
   assert.ok(constraints.every((c) => c.convalidated));
   assert.deepEqual((await db.query("SELECT max_repositories, max_issues_per_period, period FROM ghic_plans WHERE plan = 'starter'")).rows,
-    [{ max_repositories: 1, max_issues_per_period: 50, period: "day" }]);
+    // v6 set 50/day; v10 (free beta) lowers an untouched 50 to 20.
+    [{ max_repositories: 1, max_issues_per_period: 20, period: "day" }]);
   await migrate();
   await assertApplied(db, [2, 3, 4, 5, 6, 7]);
   assert.deepEqual(await protectedData(db), before);
@@ -252,4 +253,29 @@ test("billing and purge-audit tables are created by the real SQL", async (t) => 
   await assert.rejects(
     db.query("INSERT INTO ghic_billing_events(event_id, type, to_plan) VALUES ('evt_1','x','pro')"),
   );
+});
+
+test("v10 lowers an untouched Starter to 20/day, once, and leaves a hand-tuned one alone", async (t) => {
+  const starter = async (db) => (await db.query(
+    "SELECT max_issues_per_period AS n, period FROM ghic_plans WHERE plan = 'starter'",
+  )).rows[0];
+
+  const fresh = await fixture(t);
+  await fresh.migrate();
+  await assertApplied(fresh.db, [6, 10]);
+  assert.deepEqual(await starter(fresh.db), { n: 20, period: "day" });
+  // Re-running every migration on a later cold start changes nothing.
+  await fresh.db.query("UPDATE ghic_plans SET max_issues_per_period = 35 WHERE plan = 'starter'");
+  await fresh.migrate();
+  assert.deepEqual(await starter(fresh.db), { n: 35, period: "day" });
+
+  // A database where v6 already ran and an operator then chose 35/day.
+  const tuned = await fixture(t);
+  await tuned.db.exec("INSERT INTO ghic_schema_migrations(version) VALUES (6)");
+  await tuned.db.query(
+    "UPDATE ghic_plans SET max_repositories = 1, max_issues_per_period = 35, period = 'day' WHERE plan = 'starter'",
+  );
+  await tuned.migrate();
+  assert.deepEqual(await starter(tuned.db), { n: 35, period: "day" });
+  await assertApplied(tuned.db, [10]);
 });

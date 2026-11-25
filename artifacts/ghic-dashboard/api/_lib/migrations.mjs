@@ -9,6 +9,7 @@ const PLAN_POLICY_VERSION = 6;
 // 7 belongs to the ownership contract, whose DO block hardcodes it.
 const BILLING_VERSION = 8;
 const PURGE_AUDIT_VERSION = 9;
+const FREE_BETA_PLAN_VERSION = 10;
 
 // This migration is additive and deliberately leaves the legacy singleton
 // columns/constraints in place for the expand-and-contract rollout.
@@ -828,6 +829,28 @@ export async function runTenancyMigrations(q) {
          SELECT 1 FROM ghic_schema_migrations WHERE version = ${PURGE_AUDIT_VERSION}
        )`,
 
+    // ---- v10: free-beta Starter limit ---------------------------------
+    // Every analysis's AI step runs on free provider tiers (Groq: ~200K
+    // tokens/day for the whole service), which serve roughly 40-60 full
+    // analyses a day across ALL workspaces. At 50/day one busy workspace
+    // could spend the entire budget alone; 20/day keeps several served.
+    // Only a row still at the v6 launch value moves, so an operator who
+    // already tuned Starter by hand is not overwritten.
+    q`UPDATE ghic_plans
+       SET max_issues_per_period = 20,
+           updated_at = now()
+       WHERE plan = 'starter'
+         AND max_issues_per_period = 50
+         AND period = 'day'
+         AND NOT EXISTS (
+           SELECT 1 FROM ghic_schema_migrations WHERE version = ${FREE_BETA_PLAN_VERSION}
+         )`,
+    q`INSERT INTO ghic_schema_migrations (version)
+       SELECT ${FREE_BETA_PLAN_VERSION}
+       WHERE NOT EXISTS (
+         SELECT 1 FROM ghic_schema_migrations WHERE version = ${FREE_BETA_PLAN_VERSION}
+       )`,
+
   ];
   await q.transaction(statements);
 }
@@ -838,4 +861,5 @@ export {
   PLAN_POLICY_VERSION,
   BILLING_VERSION,
   PURGE_AUDIT_VERSION,
+  FREE_BETA_PLAN_VERSION,
 };

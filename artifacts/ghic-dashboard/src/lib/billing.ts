@@ -29,6 +29,8 @@ export interface WorkspaceBilling {
   cancelAtPeriodEnd: boolean;
   customerId: string | null;
   history: BillingHistoryEntry[];
+  /** False during the free beta: no paid plan can be started. */
+  checkoutAvailable?: boolean;
 }
 
 export const billingKey = ['workspace', 'billing'] as const;
