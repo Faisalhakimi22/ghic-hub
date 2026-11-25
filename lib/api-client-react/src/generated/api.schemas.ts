@@ -90,6 +90,8 @@ export interface Issue {
   updatedAt: string | null;
   /** @nullable */
   analysisTimestamp?: string | null;
+  /** @nullable */
+  analysisId?: string | null;
   aiStatus: string;
   hasEngineeringReport: boolean;
   url: string;

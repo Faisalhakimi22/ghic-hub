@@ -1,6 +1,7 @@
 import { database } from "./db.mjs";
 
 const LEDGER_TYPES = new Set([
+  "maintainer_feedback",
   "prediction",
   "analysis",
   "processing_failure",
@@ -390,10 +391,14 @@ function safeRepositoryError(error) {
   return "The most recent repository indexing operation failed.";
 }
 
-export async function readIssues(params = {}) {
+export async function readIssues(params = {}, { getDatabase = database, getCapabilities = sourceCapabilities } = {}) {
   if (!params.workspaceId) return { items: [], total: 0, ...pagination(params.page, params.limit), available: false };
-  const q = await database();
-  const capabilities = await sourceCapabilities();
+  const issueNumber = params.issueNumber == null ? null : Number(params.issueNumber);
+  if (issueNumber !== null && (!Number.isSafeInteger(issueNumber) || issueNumber < 1 || issueNumber > 2147483647)) {
+    throw Object.assign(new Error("Issue number must be a positive integer."), { status: 400 });
+  }
+  const q = await getDatabase();
+  const capabilities = await getCapabilities();
   const paging = pagination(params.page, params.limit);
   if (!capabilities.ledger) {
     return { items: [], total: 0, ...paging, available: true };
@@ -414,7 +419,7 @@ export async function readIssues(params = {}) {
      ), analyses AS (
        SELECT DISTINCT ON (data->>'repo', (data->>'number')::int)
               data->>'repo' AS repo, (data->>'number')::int AS number,
-              data, created_at
+              data, created_at, id::text AS analysis_id
        FROM ghic_ledger
        WHERE workspace_id = $12 AND data->>'type' = 'analysis'
          AND data->>'number' ~ '^[0-9]+$'
@@ -441,7 +446,7 @@ export async function readIssues(params = {}) {
      ), rows AS (
        SELECT k.repo, k.number,
               p.data AS prediction, p.created_at AS prediction_created_at,
-              a.data AS analysis, a.created_at AS analysis_created_at,
+              a.data AS analysis, a.created_at AS analysis_created_at, a.analysis_id,
               o.data AS outcome, o.created_at AS outcome_created_at,
               COALESCE(actions.comment_posted, false) AS comment_posted,
               COALESCE(a.created_at, p.created_at) AS sort_at,
@@ -475,6 +480,7 @@ export async function readIssues(params = {}) {
        AND ($8::text = '' OR COALESCE(analysis->'labels', '[]'::jsonb) ? $8::text
                     OR COALESCE(analysis->'llm_analysis'->'recommended_labels', '[]'::jsonb) ? $8::text)
        AND $9::text = ''
+       AND ($13::int IS NULL OR number = $13::int)
      ORDER BY sort_at DESC
      LIMIT $10 OFFSET $11`,
     [
@@ -490,6 +496,7 @@ export async function readIssues(params = {}) {
       paging.limit,
       paging.offset,
       String(params.workspaceId || ""),
+      issueNumber,
     ],
   );
   const total = rows.length ? asNumber(rows[0].total_count, 0) : 0;
@@ -566,6 +573,7 @@ export function issueFromRow(row = {}) {
 
   return {
     id: `${repositoryId(repo)}~${number}`,
+    analysisId: row.analysis_id == null ? null : String(row.analysis_id),
     number,
     repositoryId: repositoryId(repo),
     repositoryName: repo,
@@ -694,7 +702,7 @@ export async function readLedgerEvents(limit = 100, workspaceId = "") {
      FROM ghic_ledger
      WHERE workspace_id = $2 AND data->>'type' IN (
         'prediction', 'analysis', 'processing_failure', 'authorization_skip',
-        'action', 'label_event', 'outcome'
+        'action', 'label_event', 'outcome', 'maintainer_feedback'
      )
      ORDER BY id DESC
      LIMIT $1`,
@@ -720,6 +728,15 @@ export function activityFromLedgerRow(row = {}) {
     timestamp,
     link,
   };
+  if (type === "maintainer_feedback") {
+    const decision = ["accepted", "rejected", "corrected"].includes(data.decision) ? data.decision : "reviewed";
+    return {
+      ...base, actor: data.actor_name || "Workspace maintainer",
+      message: `${decision} the recommendation for ${repo}#${number}`,
+      title: "Maintainer decision recorded",
+      description: data.classification ? `Classification corrected to ${data.classification}.` : `Recommendation ${decision}.`,
+    };
+  }
   if (type === "analysis") {
     const llm = asObject(data.llm_analysis);
     const evidence = data.repository_evidence_status || "not recorded";

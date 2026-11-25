@@ -225,10 +225,12 @@ test("issue detail keeps the authenticated workspace when repository and number 
     }),
   );
   const res = response();
-  await handler(request("issues/other-repo~999"), res);
+  await handler(request("issues/other~repo~999"), res);
   assert.equal(res.statusCode, 404);
   assert.equal(received.workspaceId, "workspace-a");
-  assert.equal(received.repositoryId, "other-repo");
+  assert.equal(received.repositoryId, "other~repo");
+  assert.equal(received.issueNumber, 999);
+  assert.equal(received.limit, 1);
 });
 
 test("unauthenticated issue reads fail before the issue query runs", async () => {
@@ -904,4 +906,69 @@ test("the database status is the probe's answer, not a constant", async () => {
   const res = response();
   await handler(request("system-health", { role: "admin" }), res);
   assert.equal(res.body.databaseStatus, "degraded");
+});
+
+for (const [name, authOverride, status] of [
+  ["unauthenticated", { verifyRequest: async () => { throw new AuthError("Missing token."); } }, 401],
+  ["non-member", { authenticateUser: async () => { throw new AuthError("Membership required.", 403); } }, 403],
+]) {
+  test(`${name} feedback requests fail before persistence`, async () => {
+    let called = false;
+    const handler = createHandler(dependencies({ ...authOverride, saveIssueFeedback: async () => { called = true; } }));
+    const res = response();
+    await handler(request("issues/acme~repo~12/feedback", { method: "POST", role: "owner", body: {} }), res);
+    assert.equal(res.statusCode, status);
+    assert.equal(called, false);
+  });
+}
+
+for (const role of ["owner", "admin", "member", "viewer"]) {
+  test(`${role} feedback write permission is enforced by the API`, async () => {
+    let received;
+    const handler = createHandler(dependencies({
+      saveIssueFeedback: async (viewer, id) => { received = { viewer, id }; return { replayed: false }; },
+    }));
+    const res = response();
+    await handler(requestWithQuery("issues/acme~repo~12/feedback", { workspace_id: "workspace-b", workspaceId: "workspace-b" },
+      { method: "POST", role, body: {} }), res);
+    if (["owner", "admin"].includes(role)) {
+      assert.equal(res.statusCode, 200);
+      assert.equal(received.viewer.workspaceId, "workspace-a");
+      assert.equal(received.id, "acme~repo~12");
+    } else {
+      assert.equal(res.statusCode, 403);
+      assert.equal(received, undefined);
+    }
+  });
+}
+
+test("feedback history receives authenticated scope and bypasses no issue route", async () => {
+  let received;
+  const handler = createHandler(dependencies({
+    readIssueFeedback: async (viewer, id) => { received = { viewer, id }; return { items: [], analysisId: null }; },
+    readIssues: async () => { assert.fail("Feedback must not fall through to issue detail"); },
+  }));
+  const res = response();
+  await handler(requestWithQuery("issues/acme~repo~12/feedback", { workspaceId: "workspace-b" }), res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(received.viewer.workspaceId, "workspace-a");
+  assert.equal(res.headers["cache-control"], "private, no-store");
+});
+
+test("feedback storage errors do not leak database details", async () => {
+  const handler = createHandler(dependencies({ saveIssueFeedback: async () => { throw new Error("synthetic internal connection detail"); } }));
+  const res = response();
+  await handler(request("issues/acme~repo~12/feedback", { method: "POST", role: "owner", body: {} }), res);
+  assert.equal(res.statusCode, 503);
+  assert.doesNotMatch(JSON.stringify(res.body), /synthetic internal/);
+});
+
+test("feedback rejects malformed issue IDs and unsupported methods", async () => {
+  const handler = createHandler(dependencies({ saveIssueFeedback: async () => assert.fail("Must not write") }));
+  const bad = response();
+  await handler(request("issues/acme~repo~0/feedback", { method: "POST", role: "owner" }), bad);
+  assert.equal(bad.statusCode, 400);
+  const remove = response();
+  await handler(request("issues/acme~repo~1/feedback", { method: "DELETE", role: "owner" }), remove);
+  assert.equal(remove.statusCode, 405);
 });

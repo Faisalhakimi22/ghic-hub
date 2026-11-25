@@ -3,7 +3,8 @@ import { getGetIssueQueryKey, useGetIssue } from "@workspace/api-client-react";
 import { ExternalLink } from "lucide-react";
 import { useParams } from "wouter";
 
-import { DataError, UnavailableState } from "@/components/data-state";
+import { DataError } from "@/components/data-state";
+import { MaintainerFeedback } from "@/components/maintainer-feedback";
 import {
   Grid,
   MetricCard,
@@ -57,6 +58,7 @@ export default function IssueDetail() {
         title={`#${issue.number} ${issue.title || "Title not recorded"}`}
         description={`${issue.repositoryName} | analyzed ${formatDate(issue.analysisTimestamp || issue.updatedAt)}`}
       >
+        <StatusBadge status="neutral" text={`Classification: ${issue.classification}`} />
         {issue.priority && (
           <StatusBadge
             status={tone(issue.priority)}
@@ -132,10 +134,12 @@ export default function IssueDetail() {
               </p>
             </Panel>
 
-            <UnavailableState
-              title="Root-cause intelligence is not enabled"
-              reason="GHIC stores the issue analysis and retrieved repository evidence, but Engineering Intelligence is intentionally disabled."
-            />
+            <Panel title="Maintainer Decision">
+              <MaintainerFeedback key={`${id}-${issue.analysisId}`} id={id}
+                analysisId={issue.aiStatus === "complete" ? issue.analysisId || null : null}
+                onReload={() => { void query.refetch(); }} />
+            </Panel>
+
           </div>
 
           <div className="flex flex-col gap-8 min-w-0">

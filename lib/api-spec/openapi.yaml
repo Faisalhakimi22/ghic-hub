@@ -1232,10 +1232,15 @@ components:
         engineeringIntelligenceStatus: { type: string }
         webhookStatus: { type: string }
         installationStatus: { type: string }
+        githubAccessStatus:
+          type: string
+          description: Current GitHub App access state, independent from repository indexing.
         # True when a live GitHub App installation currently grants GHIC
         # access to this repository, as opposed to GHIC merely holding an
         # index built while an earlier installation existed.
-        connected: { type: boolean }
+        connected:
+          type: boolean
+          description: True when a live GitHub App installation currently grants GHIC access.
         connectedAt: { type: ["string", "null"] }
         description: { type: ["string", "null"] }
         url: { type: string }
@@ -1403,6 +1408,7 @@ components:
         createdAt: { type: ["string", "null"] }
         updatedAt: { type: ["string", "null"] }
         analysisTimestamp: { type: ["string", "null"] }
+        analysisId: { type: ["string", "null"] }
         aiStatus: { type: string }
         hasEngineeringReport: { type: boolean }
         url: { type: string }

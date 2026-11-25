@@ -30,6 +30,7 @@ import {
   refreshGitHubInstallation,
 } from "./_lib/github-installations.mjs";
 import { usageForWorkspace } from "./_lib/plans.mjs";
+import { parseIssueIdentifier, readIssueFeedback, saveIssueFeedback } from "./_lib/issue-feedback.mjs";
 import { billingHistory, subscriptionForWorkspace } from "./_lib/billing.mjs";
 import { createCheckoutSession, createPortalSession } from "./_lib/stripe.mjs";
 import {
@@ -294,6 +295,8 @@ const productionDependencies = {
   billingHistory,
   createCheckoutSession,
   createPortalSession,
+  readIssueFeedback,
+  saveIssueFeedback,
 };
 
 export function createHandler(overrides = {}) {
@@ -442,9 +445,7 @@ export function createHandler(overrides = {}) {
         return;
       }
 
-      // GitHub connection. These are the only write surfaces besides account
-      // and organization administration, so they sit above the read-only
-      // guard below.
+      // Authenticated mutation routes sit above the read-only guard below.
       if (path === "github/connection" && req.method === "GET") {
         res.status(200).json(await dependencies.getGitHubConnectionSummary(viewer.workspaceId));
         return;
@@ -529,6 +530,20 @@ export function createHandler(overrides = {}) {
         return;
       }
 
+      if (segments[0] === "issues" && segments[1] && segments[2] === "feedback" && segments.length === 3) {
+        parseIssueIdentifier(segments[1]);
+        if (req.method === "GET") {
+          res.status(200).json(await dependencies.readIssueFeedback(viewer, segments[1]));
+          return;
+        }
+        if (req.method === "POST") {
+          requireRole(viewer, "admin");
+          res.status(200).json(await dependencies.saveIssueFeedback(viewer, segments[1], await readJson(req)));
+          return;
+        }
+        throw Object.assign(new Error("Feedback supports GET and POST only."), { status: 405 });
+      }
+
       if (req.method !== "GET") {
         throw Object.assign(new Error("This dashboard surface is read-only."), {
           status: 405,
@@ -593,30 +608,19 @@ export function createHandler(overrides = {}) {
             workspaceId: viewer.workspaceId,
           },
         );
-      } else if (segments[0] === "issues" && segments[1]) {
-        const separator = segments[1].lastIndexOf("~");
-        if (separator < 1)
-          throw Object.assign(new Error("Issue identifier is invalid."), {
-            status: 400,
-          });
-        const repoPart = segments[1].slice(0, separator);
-        const numberPart = segments[1].slice(separator + 1);
-        if (!/^\d+$/.test(numberPart)) {
-          throw Object.assign(new Error("Issue identifier is invalid."), {
-            status: 400,
-          });
-        }
-        const repo = repositoryFromId(repoPart);
+      } else if (segments[0] === "issues" && segments[1] && segments.length === 2) {
+        const { repo, number } = parseIssueIdentifier(segments[1]);
         const response = await dependencies.readIssues({
           workspaceId: viewer.workspaceId,
           repositoryId: repositoryIdForQuery(repo),
-          limit: 100,
+          issueNumber: number,
+          limit: 1,
         });
         const issue = response.items.find(
           (item) =>
             item.id === segments[1] ||
             (item.repositoryName === repo &&
-              item.number === Number(numberPart)),
+              item.number === number),
         );
         if (!issue)
           throw Object.assign(new Error("Issue not found."), { status: 404 });

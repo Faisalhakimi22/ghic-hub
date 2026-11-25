@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { SessionQueries } from "@/components/session-queries";
 import { Route, Switch, Router as WouterRouter } from "wouter";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Shell } from "@/components/layout/Shell";
@@ -32,15 +32,6 @@ import Settings from "@/pages/settings";
 import AuditLogs from "@/pages/audit-logs";
 import SystemHealth from "@/pages/system-health";
 import NotFound from "@/pages/not-found";
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: false,
-    },
-  },
-});
 
 function Router() {
   return (
@@ -146,11 +137,11 @@ function AppContent() {
 function App() {
   return (
     <ThemeProvider defaultTheme="system" storageKey="ghic-theme">
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
+      <AuthProvider>
+        <SessionQueries>
           <AppContent />
-        </AuthProvider>
-      </QueryClientProvider>
+        </SessionQueries>
+      </AuthProvider>
     </ThemeProvider>
   );
 }
