@@ -34,6 +34,8 @@ export interface WorkspaceUsage {
    * disconnects a repository afterwards.
    */
   analysesRetained?: number;
+  /** False during the free beta: there is no plan to upgrade to yet. */
+  checkoutAvailable?: boolean;
 }
 
 export const usageKey = ['workspace', 'usage'] as const;

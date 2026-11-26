@@ -576,7 +576,12 @@ export function createHandler(overrides = {}) {
       } else if (path === "dashboard/alerts") {
         body = (await overview(viewer)).alerts;
       } else if (path === "usage") {
-        body = await dependencies.usageForWorkspace(viewer.workspaceId);
+        // Every member reads usage (billing itself is admin-only), so this
+        // is where the UI learns whether "upgrade" leads anywhere.
+        body = {
+          ...(await dependencies.usageForWorkspace(viewer.workspaceId)),
+          checkoutAvailable: dependencies.billingEnabled(),
+        };
       } else if (path === "billing") {
         requireRole(viewer, "admin");
         const [subscription, history] = await Promise.all([

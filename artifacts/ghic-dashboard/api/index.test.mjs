@@ -728,6 +728,19 @@ test("usage is readable by every role, not only administrators", async () => {
   assert.equal(res.statusCode, 200);
 });
 
+test("usage tells every member whether an upgrade exists", async () => {
+  // Billing is admin-only, but the repository-limit notice is shown to
+  // everyone, and must not offer an upgrade during the free beta.
+  for (const enabled of [true, false]) {
+    const handler = createHandler(dependencies({ billingEnabled: () => enabled }));
+    const res = response();
+    await handler(request("usage", { role: "viewer" }), res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.checkoutAvailable, enabled);
+    assert.equal(res.body.issues.used, 12);
+  }
+});
+
 test("usage rejects writes", async () => {
   const handler = createHandler(dependencies());
   const res = response();

@@ -1,6 +1,6 @@
 import React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Save, ShieldAlert } from "lucide-react";
+import { Check, Loader2, Save, ShieldAlert } from "lucide-react";
 
 import { BillingPanel } from "@/components/billing-panel";
 import { UsagePanel } from "@/components/usage-panel";
@@ -104,6 +104,20 @@ export default function Settings() {
     setRole.error;
   const busy = saveAccount.isPending || saveOrganization.isPending;
 
+  // Errors already render below; success had no signal at all, so a save
+  // looked like a click that did nothing. Shown briefly, per save.
+  const [savedAt, setSavedAt] = React.useState<number | null>(null);
+  const lastSuccess = Math.max(saveAccount.submittedAt, saveOrganization.submittedAt);
+  const succeeded =
+    (saveAccount.isSuccess && saveAccount.submittedAt === lastSuccess) ||
+    (saveOrganization.isSuccess && saveOrganization.submittedAt === lastSuccess);
+  React.useEffect(() => {
+    if (!succeeded || !lastSuccess) return;
+    setSavedAt(lastSuccess);
+    const timer = window.setTimeout(() => setSavedAt(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [succeeded, lastSuccess]);
+
   return (
     <div className="flex flex-col min-h-full">
       <PageHeader
@@ -126,6 +140,15 @@ export default function Settings() {
           )}
           Save changes
         </button>
+        {savedAt !== null && !busy && (
+          <span
+            role="status"
+            className="flex items-center gap-1 text-[11px] font-display tracking-widest uppercase text-emerald-600"
+          >
+            <Check className="w-3.5 h-3.5" />
+            Saved
+          </span>
+        )}
       </PageHeader>
 
       <div className="px-4 sm:px-6 lg:px-8 border-b border-border bg-card overflow-x-auto scrollbar-none">

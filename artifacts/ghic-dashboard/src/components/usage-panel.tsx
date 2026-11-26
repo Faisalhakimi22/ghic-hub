@@ -92,15 +92,22 @@ export function RepositoryLimitNotice() {
         connected. Selecting more on GitHub will not add them here — GHIC
         keeps what you already have and does not take up the rest.
       </p>
-      {/* Upgrading happens in the app now, so the way out of a limit is a
-          page in the product rather than a marketing page that says to send
-          an email. */}
-      <Link
-        href="/settings"
-        className="self-start text-[11px] font-display tracking-widest uppercase font-bold underline underline-offset-4 hover:no-underline"
-      >
-        Upgrade plan
-      </Link>
+      {/* Only offer an upgrade when one can actually be bought. During the
+          free beta checkout is refused server-side, so a link would lead to
+          a page saying nothing is on sale. */}
+      {data.checkoutAvailable ? (
+        <Link
+          href="/settings"
+          className="self-start text-[11px] font-display tracking-widest uppercase font-bold underline underline-offset-4 hover:no-underline"
+        >
+          Upgrade plan
+        </Link>
+      ) : (
+        <p className="text-xs text-muted-foreground leading-relaxed max-w-prose">
+          Higher limits will come with paid plans, which are not on sale during
+          the beta.
+        </p>
+      )}
     </div>
   );
 }
