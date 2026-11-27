@@ -2,6 +2,7 @@ import React from 'react';
 import { CheckCircle2, Github, Loader2, TriangleAlert } from 'lucide-react';
 
 import {
+  BETA_FULL,
   GITHUB_INITIATED_INSTALLATION,
   clearSetupParams,
   readApiErrorCode,
@@ -119,6 +120,27 @@ export function GitHubSetupCallback({
               Not now
             </button>
           </div>
+        }
+      />
+    );
+  }
+
+  // Expected during the free beta, not a failure: the workspace is queued.
+  if (errorCode === BETA_FULL) {
+    return (
+      <Panel
+        icon={<Github className="w-4 h-4" />}
+        title="You're on the waitlist"
+        body="The free beta is full right now, so this workspace was not connected. It is on the waitlist and we will email you when a place opens. The GHIC App on GitHub does nothing until then; you can leave it installed or remove it from your GitHub settings."
+        action={
+          <button
+            onClick={() => {
+              window.location.assign('/repositories');
+            }}
+            className="w-full bg-primary text-primary-foreground px-5 py-3 font-display tracking-widest uppercase text-xs font-bold hover:bg-primary/90"
+          >
+            Continue to the hub
+          </button>
         }
       />
     );

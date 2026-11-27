@@ -95,6 +95,23 @@ export function readApiErrorCode(error: unknown): string | null {
   return typeof code === 'string' ? code : null;
 }
 
+/** The free beta is at its workspace cap; this workspace was waitlisted. */
+export const BETA_FULL = 'beta_full';
+
+/**
+ * What to show when starting a connection failed. The beta-full refusal is
+ * an expected outcome with a message written for the person reading it, so
+ * it is shown as-is rather than behind customFetch's "HTTP 409 :" prefix.
+ */
+export function connectErrorMessage(error: unknown): string | null {
+  if (!error) return null;
+  if (readApiErrorCode(error) === BETA_FULL) {
+    const data = (error as { data?: { error?: unknown } }).data;
+    if (typeof data?.error === 'string') return data.error;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
 /**
  * The installation exists on GitHub but GHIC never issued the state that
  * proves who started it, so it cannot be linked yet. Recoverable: connecting

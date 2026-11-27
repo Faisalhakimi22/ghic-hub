@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  BETA_FULL_MESSAGE,
+  DEFAULT_BETA_WORKSPACE_LIMIT,
+  betaWorkspaceLimit,
   completeGitHubInstallation,
   createGitHubInstallationIntent,
 } from "./github-installations.mjs";
@@ -29,6 +32,12 @@ function fakeDeps(options = {}) {
   const q = (strings, ...values) => {
     const text = strings.join("?").replace(/\s+/g, " ").trim();
     statements.push({ text, values });
+    if (text.startsWith("SELECT EXISTS ( SELECT 1 FROM ghic_github_installations")) {
+      return Promise.resolve([{
+        already_connected: Boolean(options.alreadyConnected),
+        connected_workspaces: options.connectedWorkspaces ?? 0,
+      }]);
+    }
     if (text.startsWith("SELECT p.plan, p.max_repositories")) {
       return Promise.resolve([{
         plan: "starter", max_repositories: 1, max_issues_per_period: 50, period: "day",
@@ -96,8 +105,9 @@ test("creates a cryptographically random short-lived installation intent", async
   assert.equal(result.ok, true);
   assert.match(result.installUrl, /state=[A-Za-z0-9_-]{40,}/);
   assert.ok(new Date(result.expiresAt).getTime() > Date.now());
-  assert.equal(d.statements[0].text.startsWith("INSERT INTO ghic_github_installation_intents"), true);
-  assert.notEqual(d.statements[0].values[0], new URL(result.installUrl).searchParams.get("state"));
+  const insert = d.statements.find((s) => s.text.startsWith("INSERT INTO ghic_github_installation_intents"));
+  assert.ok(insert);
+  assert.notEqual(insert.values[0], new URL(result.installUrl).searchParams.get("state"));
 });
 
 test("missing and forged states fail before GitHub verification", async () => {
@@ -362,4 +372,58 @@ test("trusted refresh bypasses callback state only, never workspace membership",
     assert.match(write.text, /ghic_workspace_members/);
     assert.ok(write.values.includes(false));
   }
+});
+
+// ---------------------------------------------------------------------------
+// Free-beta cap. Connections are what consume the free AI and storage tiers,
+// so this is where new workspaces are turned away -- before GitHub is
+// involved, and never for a workspace that is already connected.
+// ---------------------------------------------------------------------------
+test("a full beta refuses a new workspace before any GitHub step, and waitlists it", async () => {
+  const d = fakeDeps({ connectedWorkspaces: 25, value: { betaWorkspaceLimit: () => 25 } });
+  await assert.rejects(
+    createGitHubInstallationIntent({ ...VIEWER, email: "new@example.com" }, d.value),
+    (error) => error.status === 409 && error.code === "beta_full" && error.message === BETA_FULL_MESSAGE,
+  );
+  const waitlist = d.statements.find((s) => s.text.startsWith("INSERT INTO ghic_beta_waitlist"));
+  assert.ok(waitlist, "the refused workspace is recorded");
+  assert.equal(waitlist.values[2], "new@example.com");
+  assert.equal(
+    d.statements.some((s) => s.text.startsWith("INSERT INTO ghic_github_installation_intents")),
+    false,
+    "no install link is minted",
+  );
+});
+
+test("an already-connected workspace is never refused by the cap", async () => {
+  const d = fakeDeps({ connectedWorkspaces: 99, alreadyConnected: true, value: { betaWorkspaceLimit: () => 25 } });
+  const result = await createGitHubInstallationIntent(VIEWER, d.value);
+  assert.equal(result.ok, true);
+  assert.equal(d.statements.some((s) => s.text.startsWith("INSERT INTO ghic_beta_waitlist")), false);
+});
+
+test("an intent minted before the beta filled cannot complete a new connection", async () => {
+  const d = fakeDeps({ connectedWorkspaces: 25, value: { betaWorkspaceLimit: () => 25 } });
+  await assert.rejects(
+    completeGitHubInstallation(VIEWER, completeInput(), d.value),
+    (error) => error.code === "beta_full",
+  );
+  assert.equal(d.transactions, 0);
+});
+
+test("below the cap, or with the cap off, connecting proceeds", async () => {
+  for (const value of [{ betaWorkspaceLimit: () => 25 }, { betaWorkspaceLimit: () => null }]) {
+    const d = fakeDeps({ connectedWorkspaces: 24, value });
+    const result = await createGitHubInstallationIntent(VIEWER, d.value);
+    assert.equal(result.ok, true);
+  }
+});
+
+test("the cap reads GHIC_BETA_WORKSPACE_LIMIT, defaulting to 25", () => {
+  assert.equal(betaWorkspaceLimit({}), DEFAULT_BETA_WORKSPACE_LIMIT);
+  assert.equal(DEFAULT_BETA_WORKSPACE_LIMIT, 25);
+  assert.equal(betaWorkspaceLimit({ GHIC_BETA_WORKSPACE_LIMIT: "40" }), 40);
+  assert.equal(betaWorkspaceLimit({ GHIC_BETA_WORKSPACE_LIMIT: "unlimited" }), null);
+  assert.equal(betaWorkspaceLimit({ GHIC_BETA_WORKSPACE_LIMIT: "lots" }), 25);
+  assert.equal(betaWorkspaceLimit({ GHIC_BETA_WORKSPACE_LIMIT: "-3" }), 25);
 });

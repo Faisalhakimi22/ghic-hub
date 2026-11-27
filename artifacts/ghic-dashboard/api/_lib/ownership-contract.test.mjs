@@ -279,3 +279,15 @@ test("v10 lowers an untouched Starter to 20/day, once, and leaves a hand-tuned o
   assert.deepEqual(await starter(tuned.db), { n: 35, period: "day" });
   await assertApplied(tuned.db, [10]);
 });
+
+test("v11 creates the beta waitlist with one row per workspace, and re-runs safely", async (t) => {
+  const { db, migrate } = await fixture(t);
+  await migrate();
+  await assertApplied(db, [11]);
+  await db.query("INSERT INTO ghic_beta_waitlist (workspace_id, firebase_uid, email) VALUES ('a', 'user-a', 'a@example.com')");
+  // One row per workspace: a second refusal does not duplicate it.
+  await db.query("INSERT INTO ghic_beta_waitlist (workspace_id, firebase_uid) VALUES ('a', 'user-a') ON CONFLICT (workspace_id) DO NOTHING");
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM ghic_beta_waitlist")).rows[0].n, 1);
+  await migrate(); // re-running every migration on a later cold start is harmless
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM ghic_beta_waitlist")).rows[0].n, 1);
+});

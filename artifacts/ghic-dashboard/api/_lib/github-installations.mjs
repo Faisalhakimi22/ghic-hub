@@ -30,6 +30,63 @@ export const GITHUB_APP_SLUG =
   process.env.GHIC_GITHUB_APP_SLUG || "ghic-github-issue-intelligence";
 const INSTALLATION_INTENT_TTL_MS = 10 * 60 * 1000;
 
+/**
+ * How many workspaces may hold a connected GitHub installation during the
+ * free beta. Everything after the connection (AI analysis, indexing,
+ * storage) runs on free tiers sized for a few dozen repositories, so the
+ * cap protects the users already in from a sudden spike.
+ *
+ * GHIC_BETA_WORKSPACE_LIMIT: an integer, or "unlimited". Unset means 25.
+ * A soft limit: two workspaces connecting at the same instant can pass it
+ * by one, which is acceptable for a capacity guard (it is not billing).
+ */
+export const DEFAULT_BETA_WORKSPACE_LIMIT = 25;
+
+export function betaWorkspaceLimit(env = process.env) {
+  const raw = String(env.GHIC_BETA_WORKSPACE_LIMIT ?? "").trim().toLowerCase();
+  if (raw === "") return DEFAULT_BETA_WORKSPACE_LIMIT;
+  if (raw === "unlimited") return null;
+  const limit = Number(raw);
+  return Number.isInteger(limit) && limit >= 0 ? limit : DEFAULT_BETA_WORKSPACE_LIMIT;
+}
+
+export const BETA_FULL_MESSAGE =
+  "The free beta is full right now. Your workspace is on the waitlist, and we will email you when a place opens.";
+
+/**
+ * Refuse a new connection when the beta is full. A workspace that is
+ * already connected is never refused: reconnecting, refreshing or adding a
+ * repository must keep working for the people already in.
+ */
+async function assertBetaHasRoom(viewer, workspaceId, deps) {
+  const limit = deps.betaWorkspaceLimit ? deps.betaWorkspaceLimit() : betaWorkspaceLimit();
+  if (limit === null) return;
+  const q = await deps.database();
+  const rows = await q`
+    SELECT
+      EXISTS (
+        SELECT 1 FROM ghic_github_installations
+        WHERE workspace_id = ${workspaceId}
+          AND connection_status = 'connected' AND revoked_at IS NULL
+      ) AS already_connected,
+      (
+        SELECT count(DISTINCT workspace_id)::int FROM ghic_github_installations
+        WHERE connection_status = 'connected' AND revoked_at IS NULL
+      ) AS connected_workspaces`;
+  const row = rows?.[0] || {};
+  if (row.already_connected || Number(row.connected_workspaces || 0) < limit) return;
+  try {
+    await q`
+      INSERT INTO ghic_beta_waitlist (workspace_id, firebase_uid, email)
+      VALUES (${workspaceId}, ${viewer.id}, ${viewer.email || null})
+      ON CONFLICT (workspace_id) DO NOTHING`;
+  } catch {
+    // The refusal stands even if the waitlist row cannot be written; letting
+    // a bookkeeping failure open the cap would defeat the cap.
+  }
+  throw Object.assign(new Error(BETA_FULL_MESSAGE), { status: 409, code: "beta_full" });
+}
+
 async function workspaceForViewer(viewer, deps) {
   if (viewer?.workspaceId) return viewer.workspaceId;
   if (!viewer?.id || typeof deps.resolveWorkspace !== "function") {
@@ -89,6 +146,9 @@ export function githubInstallUrl(state = "") {
 export async function createGitHubInstallationIntent(viewer, deps = REAL) {
   assertViewerMayConnect(viewer);
   const workspaceId = await workspaceForViewer(viewer, deps);
+  // Checked before GitHub is involved, so nobody installs the App on GitHub
+  // only to be turned away when they come back.
+  await assertBetaHasRoom(viewer, workspaceId, deps);
   const state = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + INSTALLATION_INTENT_TTL_MS);
   const q = await deps.database();
@@ -392,6 +452,9 @@ export async function completeGitHubInstallation(
       code: "github_app_not_configured",
     });
   }
+  // Again at completion: an intent minted before the beta filled up must
+  // not slip a new workspace in afterwards.
+  await assertBetaHasRoom(viewer, workspaceId, deps);
 
   const installationId = Number(input.installationId ?? input.installation_id);
   if (!Number.isFinite(installationId) || installationId <= 0) {

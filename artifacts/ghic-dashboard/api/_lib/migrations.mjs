@@ -10,6 +10,7 @@ const PLAN_POLICY_VERSION = 6;
 const BILLING_VERSION = 8;
 const PURGE_AUDIT_VERSION = 9;
 const FREE_BETA_PLAN_VERSION = 10;
+const BETA_WAITLIST_VERSION = 11;
 
 // This migration is additive and deliberately leaves the legacy singleton
 // columns/constraints in place for the expand-and-contract rollout.
@@ -851,6 +852,22 @@ export async function runTenancyMigrations(q) {
          SELECT 1 FROM ghic_schema_migrations WHERE version = ${FREE_BETA_PLAN_VERSION}
        )`,
 
+    // ---- v11: beta waitlist -------------------------------------------
+    // Workspaces refused a GitHub connection because the free beta is at
+    // its cap (GHIC_BETA_WORKSPACE_LIMIT). One row per workspace, kept so the
+    // operator can tell them when a place opens; deleted with the workspace.
+    q`CREATE TABLE IF NOT EXISTS ghic_beta_waitlist (
+      workspace_id TEXT PRIMARY KEY REFERENCES ghic_workspaces(id) ON DELETE CASCADE,
+      firebase_uid TEXT NOT NULL,
+      email TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`,
+    q`INSERT INTO ghic_schema_migrations (version)
+       SELECT ${BETA_WAITLIST_VERSION}
+       WHERE NOT EXISTS (
+         SELECT 1 FROM ghic_schema_migrations WHERE version = ${BETA_WAITLIST_VERSION}
+       )`,
+
   ];
   await q.transaction(statements);
 }
@@ -862,4 +879,5 @@ export {
   BILLING_VERSION,
   PURGE_AUDIT_VERSION,
   FREE_BETA_PLAN_VERSION,
+  BETA_WAITLIST_VERSION,
 };

@@ -2,6 +2,7 @@ import React from 'react';
 import { Github } from 'lucide-react';
 
 import {
+  connectErrorMessage,
   useCreateInstallationIntent,
   useGitHubConnection,
 } from '@/lib/github-connection';
@@ -101,7 +102,7 @@ export function ConnectGitHub({
       configured={connection.data?.configured ?? false}
       canManage={['owner', 'admin'].includes(account.data?.role || '')}
       connecting={createIntent.isPending}
-      error={createIntent.error?.message ?? null}
+      error={connectErrorMessage(createIntent.error)}
       heading={heading}
       blurb={blurb}
       onConnect={() => {

@@ -12,6 +12,7 @@ import { DataError } from "@/components/data-state";
 import { PageContent, PageHeader, StatusBadge } from "@/components/ui/swiss";
 import { useCurrentAccount, useDashboardDate } from "@/lib/account";
 import {
+  connectErrorMessage,
   useGitHubConnection,
   useCreateInstallationIntent,
   useDisconnectInstallation,
@@ -65,7 +66,7 @@ export default function Repositories() {
           onDisconnect={(id) => disconnect.mutate(id)}
           refreshing={refresh.isPending}
           disconnecting={disconnect.isPending}
-          refreshError={refresh.error?.message ?? disconnect.error?.message ?? createIntent.error?.message ?? null}
+          refreshError={refresh.error?.message ?? disconnect.error?.message ?? connectErrorMessage(createIntent.error)}
           connecting={createIntent.isPending}
         />
 
@@ -75,7 +76,7 @@ export default function Repositories() {
             canManage={canManageGitHub}
             onConnect={() => void startGitHubInstall()}
             connecting={createIntent.isPending}
-            error={createIntent.error?.message ?? null}
+            error={connectErrorMessage(createIntent.error)}
           />
         ) : null}
 
